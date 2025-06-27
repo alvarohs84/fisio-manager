@@ -1,0 +1,20 @@
+{% extends 'base.html' %}
+{% block title %}Agenda Visual{% endblock %}
+{% block content %}
+    <div class="card"><div class="card-body"><div id='calendar'></div></div></div>
+    <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.14/index.global.min.js'></script>
+    <script>
+      document.addEventListener('DOMContentLoaded', function() {
+        var calendarEl = document.getElementById('calendar');
+        var calendar = new FullCalendar.Calendar(calendarEl, {
+          headerToolbar: { left: 'prev,next today', center: 'title', right: 'dayGridMonth,timeGridWeek,timeGridDay,listWeek' },
+          initialView: 'timeGridWeek',
+          locale: 'pt-br',
+          height: 'auto',
+          navLinks: true,
+          events: '/api/atendimentos',
+        });
+        calendar.render();
+      });
+    </script>
+{% endblock %}

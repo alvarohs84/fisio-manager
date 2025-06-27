@@ -1,0 +1,46 @@
+{% extends 'base.html' %}
+{% block title %}Agenda de Atendimentos{% endblock %}
+{% block content %}
+    <div class="card bg-light mb-4">
+        <div class="card-body">
+            <h5 class="card-title">Navegar pela Agenda</h5>
+            <div class="form-row align-items-end">
+                <div class="form-group col-md-4"><label for="nav-date">Escolha uma data:</label><input type="date" id="nav-date" class="form-control" value="{{ hoje_str }}"></div>
+                <div class="form-group col-md-8">
+                    <button id="btn-dia" class="btn btn-info">Ver Dia</button>
+                    <button id="btn-semana" class="btn btn-info">Ver Semana</button>
+                    <button id="btn-mes" class="btn btn-info">Ver Mês</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Próximos Atendimentos</h2>
+        <a href="{{ url_for('add') }}" class="btn btn-primary">Agendar Novo Atendimento</a>
+    </div>
+    {% for atendimento in atendimentos %}
+    <div class="card mb-2"><div class="card-body d-flex justify-content-between"><div>
+        <h5 class="card-title">{{ atendimento.nome_paciente }}</h5>
+        <h6 class="card-subtitle mb-2 text-muted">{{ atendimento.data_atendimento.strftime('%d/%m/%Y') }} às {{ atendimento.hora_atendimento.strftime('%H:%M') }}</h6>
+        <p class="card-text"><strong>Local:</strong> {{ atendimento.local }}</p>
+    </div><div>
+        <span class="badge badge-info p-2">{{ atendimento.status }}</span>
+        <a href="{{ url_for('edit', id=atendimento.id) }}" class="btn btn-secondary btn-sm ml-2">Checar / Editar</a>
+    </div></div></div>
+    {% else %}
+    <div class="alert alert-info">Nenhum atendimento futuro agendado.</div>
+    {% endfor %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const dateInput = document.getElementById('nav-date');
+    document.getElementById('btn-dia').addEventListener('click', () => { if (dateInput.value) window.location.href = '/dia/' + dateInput.value; });
+    document.getElementById('btn-semana').addEventListener('click', () => { if (dateInput.value) window.location.href = '/semana/' + dateInput.value; });
+    document.getElementById('btn-mes').addEventListener('click', () => {
+        if (dateInput.value) {
+            const date = new Date(dateInput.value + 'T00:00:00');
+            window.location.href = `/mes/${date.getFullYear()}/${date.getMonth() + 1}`;
+        }
+    });
+});
+</script>
+{% endblock %}

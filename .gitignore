@@ -1,0 +1,13 @@
+# Ambientes virtuais
+/venv
+
+# Arquivos de cache do Python
+__pycache__/
+*.pyc
+
+# Arquivos de instância local
+/instance/
+
+# Arquivos de IDEs
+.vscode/
+.idea/

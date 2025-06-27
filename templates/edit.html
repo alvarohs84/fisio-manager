@@ -1,0 +1,24 @@
+{% extends 'base.html' %}
+{% block title %}Checar / Editar Atendimento{% endblock %}
+{% block content %}
+    <h2>Checar / Editar Atendimento</h2><hr>
+    <form method="post">
+        <div class="form-group"><label for="nome_paciente">Nome do Paciente</label><input type="text" name="nome_paciente" id="nome_paciente" class="form-control" value="{{ atendimento.nome_paciente }}" required></div>
+        <div class="form-row">
+            <div class="form-group col-md-6"><label for="data_atendimento">Data</label><input type="date" name="data_atendimento" id="data_atendimento" class="form-control" value="{{ atendimento.data_atendimento.strftime('%Y-%m-%d') }}" required></div>
+            <div class="form-group col-md-6"><label for="hora_atendimento">Hora</label><input type="time" name="hora_atendimento" id="hora_atendimento" class="form-control" value="{{ atendimento.hora_atendimento.strftime('%H:%M') }}" required></div>
+        </div>
+        <div class="form-group"><label for="local">Local</label><input type="text" name="local" id="local" class="form-control" value="{{ atendimento.local }}" required></div>
+        <div class="form-group"><label for="status">Status</label>
+            <select name="status" id="status" class="form-control">
+                <option value="Agendado" {% if atendimento.status == 'Agendado' %}selected{% endif %}>Agendado</option>
+                <option value="Confirmado" {% if atendimento.status == 'Confirmado' %}selected{% endif %}>Confirmado</option>
+                <option value="Concluído" {% if atendimento.status == 'Concluído' %}selected{% endif %}>Concluído</option>
+                <option value="Cancelado" {% if atendimento.status == 'Cancelado' %}selected{% endif %}>Cancelado</option>
+            </select>
+        </div>
+        <button type="submit" class="btn btn-success">Salvar Alterações</button>
+        <a href="{{ url_for('delete', id=atendimento.id) }}" class="btn btn-danger" onclick="return confirm('Tem certeza?');">Remover</a>
+        <a href="{{ url_for('index') }}" class="btn btn-secondary">Voltar</a>
+    </form>
+{% endblock %}
