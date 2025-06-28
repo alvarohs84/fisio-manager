@@ -9,8 +9,7 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = 'uma-chave-secreta-muito-segura-e-diferente'
 
 # Configuração do Banco de Dados SQLite
-basedir = os.path.abspath(os.path.dirname(__file__))
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(basedir, 'instance', 'planner.db')
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
