@@ -27,6 +27,29 @@ class PatientForm(FlaskForm):
     full_name = StringField('Nome Completo', validators=[DataRequired()])
     date_of_birth = DateField('Data de Nascimento', format='%Y-%m-%d', validators=[DataRequired()])
     phone = StringField('Telefone', validators=[DataRequired()])
+    
+    specialty = SelectField('Especialidade Principal',
+        choices=[
+            ('', '-- Selecione uma Especialidade --'),
+            ('Acupuntura', 'Acupuntura'),
+            ('Aquática', 'Aquática'),
+            ('Cardiovascular', 'Cardiovascular'),
+            ('Dermatofuncional', 'Dermatofuncional'),
+            ('Esportiva', 'Esportiva'),
+            ('Gerontologia', 'Gerontologia'),
+            ('Trabalho', 'Saúde do Trabalhador'),
+            ('Neurofuncional', 'Neurofuncional'),
+            ('Oncologia', 'Oncologia'),
+            ('Reumatologia', 'Reumatologia'),
+            ('Respiratória', 'Respiratória/Reabilitação Pulmonar'),
+            ('Traumato-Ortopédica', 'Traumato-Ortopédica'),
+            ('Osteopatia', 'Osteopatia'),
+            ('Quiropraxia', 'Quiropraxia'),
+            ('Saúde da Mulher', 'Saúde da Mulher')
+        ],
+        validators=[Optional()]
+    )
+
     submit = SubmitField('Salvar Paciente')
 
 class AppointmentForm(FlaskForm):

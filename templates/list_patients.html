@@ -9,28 +9,32 @@
 <div class="card">
     <div class="card-body">
         {% if patients.items %}
-        <table class="table table-hover">
-            <thead>
-                <tr>
-                    <th scope="col">Nome Completo</th>
-                    <th scope="col">Idade</th>
-                    <th scope="col">Telefone</th>
-                    <th scope="col">Ações</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for patient in patients.items %}
-                <tr>
-                    <td>{{ patient.full_name }}</td>
-                    <td>{{ patient.age }} anos</td>
-                    <td>{{ patient.phone }}</td>
-                    <td>
-                        <a href="{{ url_for('patient_detail', patient_id=patient.id) }}" class="btn btn-primary btn-sm">Ver Prontuário</a>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle">
+                <thead>
+                    <tr>
+                        <th scope="col">Nome Completo</th>
+                        <th scope="col">Especialidade</th>
+                        <th scope="col">Idade</th>
+                        <th scope="col">Telefone</th>
+                        <th scope="col">Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for patient in patients.items %}
+                    <tr>
+                        <td>{{ patient.full_name }}</td>
+                        <td><span class="badge bg-secondary fw-normal">{{ patient.specialty or 'N/A' }}</span></td>
+                        <td>{{ patient.age }} anos</td>
+                        <td>{{ patient.phone }}</td>
+                        <td>
+                            <a href="{{ url_for('patient_detail', patient_id=patient.id) }}" class="btn btn-primary btn-sm">Detalhes / Prontuário</a>
                         </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
         {% else %}
         <div class="alert alert-info">Você ainda não cadastrou nenhum paciente.</div>
         {% endif %}

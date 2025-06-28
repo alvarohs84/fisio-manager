@@ -137,6 +137,7 @@ def add_patient():
             full_name=form.full_name.data,
             date_of_birth=form.date_of_birth.data,
             phone=form.phone.data,
+            specialty=form.specialty.data,
             professional=current_user
         )
         db.session.add(new_patient)

@@ -34,6 +34,8 @@ class Patient(db.Model):
     phone = db.Column(db.String(20))
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     
+    specialty = db.Column(db.String(100), nullable=True) # Especialidade principal do tratamento
+
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     
     appointments = db.relationship('Appointment', backref='patient', lazy='dynamic', cascade="all, delete-orphan")
@@ -70,7 +72,7 @@ class ElectronicRecord(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     record_date = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     
-    medical_diagnosis = db.Column(db.Text, nullable=True) # Diagnóstico Médico (opcional)
+    medical_diagnosis = db.Column(db.Text, nullable=True)
 
     subjective_notes = db.Column(db.Text, nullable=False)
     objective_notes = db.Column(db.Text, nullable=False)

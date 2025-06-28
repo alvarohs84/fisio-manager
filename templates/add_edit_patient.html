@@ -29,6 +29,15 @@
                             <span class="text-danger">{{ error }}</span>
                         {% endfor %}
                     </div>
+
+                    <div class="mb-3">
+                        {{ form.specialty.label(class="form-label") }}
+                        {{ form.specialty(class="form-select") }}
+                        {% for error in form.specialty.errors %}
+                            <span class="text-danger">{{ error }}</span>
+                        {% endfor %}
+                    </div>
+                    
                     <div class="d-flex justify-content-between">
                         <a href="{{ url_for('list_patients') }}" class="btn btn-secondary">Cancelar</a>
                         {{ form.submit(class="btn btn-primary") }}
