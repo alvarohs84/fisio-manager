@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <h1 class="mb-4">Dashboard</h1>
+
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h5 class="card-title">Total de Pacientes</h5>
+                    <p class="card-text fs-1">{{ total_patients }}</p>
+                    <a href="{{ url_for('list_patients') }}" class="btn btn-primary">Ver Pacientes</a>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h5 class="card-title">Agendamentos no Mês</h5>
+                    <p class="card-text fs-1">{{ total_appointments_month }}</p>
+                    <a href="{{ url_for('agenda') }}" class="btn btn-secondary">Ver Agenda Completa</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <h3 class="mt-5">Agendamentos de Hoje ({{ today.strftime('%d/%m/%Y') }})</h3>
+    <div class="list-group">
+        {% if appointments_today %}
+            {% for appt in appointments_today %}
+                <a href="#" class="list-group-item list-group-item-action">
+                    <div class="d-flex w-100 justify-content-between">
+                        <h5 class="mb-1">{{ appt.patient.full_name }}</h5>
+                        <small>{{ appt.start_time.strftime('%H:%M') }}</sall>
+                    </div>
+                    <p class="mb-1">Local: {{ appt.location }}</p>
+                    <span class="badge 
+                        {% if appt.status == 'Concluído' %} bg-success
+                        {% elif appt.status == 'Cancelado' %} bg-danger
+                        {% else %} bg-info
+                        {% endif %}">
+                        {{ appt.status }}
+                    </span>
+                </a>
+            {% endfor %}
+        {% else %}
+            <div class="alert alert-info" role="alert">
+                Nenhum agendamento para hoje.
+            </div>
+        {% endif %}
+    </div>
+    <div class="text-center mt-3">
+        <a href="{{ url_for('schedule_appointment') }}" class="btn btn-success">Novo Agendamento</a>
+    </div>
+</div>
+{% endblock %}

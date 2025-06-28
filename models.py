@@ -1,0 +1,79 @@
+# models.py (CORRIGIDO)
+
+from flask_sqlalchemy import SQLAlchemy
+from flask_login import UserMixin
+from werkzeug.security import generate_password_hash, check_password_hash
+from datetime import date, datetime # <--- ADICIONE/CONFIRME ESTE IMPORT
+
+db = SQLAlchemy()
+
+class User(UserMixin, db.Model):
+    """Modelo para o Profissional (Usuário do sistema)"""
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    email = db.Column(db.String(120), index=True, unique=True, nullable=False)
+    password_hash = db.Column(db.String(128))
+    
+    patients = db.relationship('Patient', backref='professional', lazy='dynamic', cascade="all, delete-orphan")
+    appointments = db.relationship('Appointment', backref='professional', lazy='dynamic', cascade="all, delete-orphan")
+
+    def set_password(self, password):
+        self.password_hash = generate_password_hash(password)
+
+    def check_password(self, password):
+        return check_password_hash(self.password_hash, password)
+
+    def __repr__(self):
+        return f'<User {self.name}>'
+
+class Patient(db.Model):
+    """Modelo para o Paciente"""
+    id = db.Column(db.Integer, primary_key=True)
+    full_name = db.Column(db.String(150), nullable=False, index=True)
+    date_of_birth = db.Column(db.Date, nullable=False)
+    phone = db.Column(db.String(20))
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow) # Agora 'datetime' é reconhecido
+    
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    
+    appointments = db.relationship('Appointment', backref='patient', lazy='dynamic', cascade="all, delete-orphan")
+    records = db.relationship('ElectronicRecord', backref='patient', lazy='dynamic', cascade="all, delete-orphan")
+
+    @property
+    def age(self):
+        today = date.today()
+        return today.year - self.date_of_birth.year - ((today.month, today.day) < (self.date_of_birth.month, self.date_of_birth.day))
+
+    def __repr__(self):
+        return f'<Patient {self.full_name}>'
+
+class Appointment(db.Model):
+    """Modelo para o Agendamento (antigo Atendimento)"""
+    id = db.Column(db.Integer, primary_key=True)
+    start_time = db.Column(db.DateTime, nullable=False)
+    location = db.Column(db.String(150), nullable=False)
+    status = db.Column(db.String(30), default='Agendado')
+    notes = db.Column(db.Text, nullable=True)
+
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    patient_id = db.Column(db.Integer, db.ForeignKey('patient.id'), nullable=False)
+
+    is_recurring = db.Column(db.Boolean, default=False)
+    recurrence_id = db.Column(db.String(36))
+
+    def __repr__(self):
+        return f'<Appointment for {self.patient.full_name} at {self.start_time}>'
+
+class ElectronicRecord(db.Model):
+    """Modelo para cada registro no Prontuário Eletrônico"""
+    id = db.Column(db.Integer, primary_key=True)
+    record_date = db.Column(db.DateTime, nullable=False, default=datetime.utcnow) # Também podemos usar aqui
+    subjective_notes = db.Column(db.Text, nullable=False)
+    objective_notes = db.Column(db.Text, nullable=False)
+    assessment = db.Column(db.Text, nullable=False)
+    plan = db.Column(db.Text, nullable=False)
+
+    patient_id = db.Column(db.Integer, db.ForeignKey('patient.id'), nullable=False)
+    
+    def __repr__(self):
+        return f'<Record for {self.patient.full_name} on {self.record_date}>'

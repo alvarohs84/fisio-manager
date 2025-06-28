@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-body">
+                <h2 class="card-title text-center">{{ title }}</h2>
+                <form method="POST" action="" novalidate>
+                    {{ form.hidden_tag() }}
+                    <div class="mb-3">
+                        {{ form.patient_id.label(class="form-label") }}
+                        {{ form.patient_id(class="form-select") }}
+                        {% if form.patient_id.errors %}
+                            {% for error in form.patient_id.errors %}
+                                <span class="text-danger">{{ error }}</span>
+                            {% endfor %}
+                        {% endif %}
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            {{ form.date.label(class="form-label") }}
+                            {{ form.date(class="form-control") }}
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            {{ form.time.label(class="form-label") }}
+                            {{ form.time(class="form-control") }}
+                        </div>
+                    </div>
+                     <div class="mb-3">
+                        {{ form.location.label(class="form-label") }}
+                        {{ form.location(class="form-control") }}
+                    </div>
+                    <div class="mb-3">
+                        {{ form.notes.label(class="form-label") }}
+                        {{ form.notes(class="form-control", rows=3) }}
+                    </div>
+
+                    <hr>
+                    <div class="form-check mb-3">
+                        {{ form.is_recurring(class="form-check-input", role="switch", id="recurringSwitch") }}
+                        {{ form.is_recurring.label(class="form-check-label") }}
+                    </div>
+                    <div id="frequency-div" style="display: none;">
+                        <div class="mb-3">
+                            {{ form.frequency.label(class="form-label") }}
+                            {{ form.frequency(class="form-control", type="number", min="1") }}
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-between mt-4">
+                        <a href="{{ url_for('agenda') }}" class="btn btn-secondary">Cancelar</a>
+                        {{ form.submit(class="btn btn-primary") }}
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Script para mostrar/esconder o campo de frequência da recorrência
+    document.getElementById('recurringSwitch').addEventListener('change', function() {
+        var frequencyDiv = document.getElementById('frequency-div');
+        if (this.checked) {
+            frequencyDiv.style.display = 'block';
+        } else {
+            frequencyDiv.style.display = 'none';
+        }
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h3 class="mb-0">Prontuário de {{ patient.full_name }}</h3>
+        <a href="{{ url_for('add_record', patient_id=patient.id) }}" class="btn btn-success">Adicionar Novo Registro</a>
+    </div>
+    <div class="card-body">
+        <p><strong>Data de Nascimento:</strong> {{ patient.date_of_birth.strftime('%d/%m/%Y') }} ({{ patient.age }} anos)</p>
+        <p><strong>Telefone:</strong> {{ patient.phone }}</p>
+    </div>
+</div>
+
+<h4>Histórico de Atendimentos</h4>
+{% if records %}
+    <div class="accordion" id="prontuarioAccordion">
+        {% for record in records %}
+            <div class="accordion-item">
+                <h2 class="accordion-header" id="heading{{ record.id }}">
+                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse{{ record.id }}" aria-expanded="false" aria-controls="collapse{{ record.id }}">
+                        <strong>Registro de {{ record.record_date.strftime('%d/%m/%Y às %H:%M') }}</strong>
+                    </button>
+                </h2>
+                <div id="collapse{{ record.id }}" class="accordion-collapse collapse" aria-labelledby="heading{{ record.id }}" data-bs-parent="#prontuarioAccordion">
+                    <div class="accordion-body">
+                        <h5>Subjetivo (Relato do Paciente)</h5>
+                        <p>{{ record.subjective_notes|nl2br }}</p>
+                        <hr>
+                        <h5>Objetivo (Sua Avaliação)</h5>
+                        <p>{{ record.objective_notes|nl2br }}</p>
+                        <hr>
+                        <h5>Diagnóstico Fisioterapêutico</h5>
+                        <p>{{ record.assessment|nl2br }}</p>
+                        <hr>
+                        <h5>Plano de Tratamento</h5>
+                        <p>{{ record.plan|nl2br }}</p>
+                    </div>
+                </div>
+            </div>
+        {% endfor %}
+    </div>
+{% else %}
+    <div class="alert alert-info">Nenhum registro encontrado no prontuário deste paciente.</div>
+{% endif %}
+
+<div class="mt-4">
+    <a href="{{ url_for('list_patients') }}" class="btn btn-secondary">&larr; Voltar para a lista de pacientes</a>
+</div>
+{% endblock %}

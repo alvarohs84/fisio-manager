@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <h1 class="mb-4">Relatórios e Estatísticas</h1>
+
+    <div class="card mb-4">
+        <div class="card-header">
+            <h4>Status dos Agendamentos no Mês Atual</h4>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-4 text-center">
+                    <div class="alert alert-success">
+                        <h2>{{ status_counts.get('Concluído', 0) }}</h2>
+                        <p class="mb-0">Concluídos</p>
+                    </div>
+                </div>
+                <div class="col-md-4 text-center">
+                    <div class="alert alert-info">
+                        <h2>{{ status_counts.get('Agendado', 0) }}</h2>
+                        <p class="mb-0">Agendados</p>
+                    </div>
+                </div>
+                <div class="col-md-4 text-center">
+                    <div class="alert alert-danger">
+                        <h2>{{ status_counts.get('Cancelado', 0) }}</h2>
+                        <p class="mb-0">Cancelados</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h4>Novos Pacientes nos Últimos 6 Meses</h4>
+        </div>
+        <div class="card-body">
+            <canvas id="newPatientsChart"></canvas>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+    // Pega os dados que o Flask passou para o template
+    const newPatientsData = {{ new_patients_data | tojson }};
+
+    // Extrai os meses (labels) e as contagens (data)
+    const labels = Object.keys(newPatientsData).reverse();
+    const data = Object.values(newPatientsData).reverse();
+
+    const ctx = document.getElementById('newPatientsChart').getContext('2d');
+    const newPatientsChart = new Chart(ctx, {
+        type: 'bar', // Tipo do gráfico (barra)
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Novos Pacientes por Mês',
+                data: data,
+                backgroundColor: 'rgba(54, 162, 235, 0.6)',
+                borderColor: 'rgba(54, 162, 235, 1)',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        // Garante que o eixo Y só mostre números inteiros
+                        stepSize: 1
+                    }
+                }
+            },
+            responsive: true,
+            plugins: {
+                legend: {
+                    position: 'top',
+                },
+                title: {
+                    display: true,
+                    text: 'Evolução do Cadastro de Pacientes'
+                }
+            }
+        }
+    });
+</script>
+{% endblock %}

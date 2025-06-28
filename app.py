@@ -1,164 +1,311 @@
 import os
-from datetime import datetime, date, timedelta
-import calendar
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
+import uuid
+from flask import Flask, render_template, redirect, url_for, flash, jsonify, request
 from flask_sqlalchemy import SQLAlchemy
+from flask_migrate import Migrate
+from flask_login import LoginManager, current_user, login_user, logout_user, login_required
+from flask_bcrypt import Bcrypt
+from datetime import datetime, date, time, timedelta
 
 # --- CONFIGURAÇÃO DA APLICAÇÃO ---
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'uma-chave-secreta-muito-segura-e-diferente'
-
-# --- CONFIGURAÇÃO DO BANCO DE DADOS ---
-# A URL será lida da variável de ambiente no servidor do Render,
-# garantindo a conexão com o banco de dados PostgreSQL persistente.
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY') or 'uma-chave-secreta-muito-segura-e-diferente-para-testes'
 db_url = os.environ.get('DATABASE_URL')
 if db_url and db_url.startswith("postgres://"):
     db_url = db_url.replace("postgres://", "postgresql://", 1)
-app.config['SQLALCHEMY_DATABASE_URI'] = db_url
+app.config['SQLALCHEMY_DATABASE_URI'] = db_url or 'sqlite:///app.db'
 
-db = SQLAlchemy(app)
+# --- INICIALIZAÇÃO DAS EXTENSÕES ---
+from models import db, User, Patient, Appointment, ElectronicRecord
+db.init_app(app)
+migrate = Migrate(app, db)
+bcrypt = Bcrypt(app)
+login_manager = LoginManager(app)
+login_manager.login_view = 'login'
+login_manager.login_message = 'Por favor, faça o login para acessar esta página.'
+login_manager.login_message_category = 'info'
 
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(int(user_id))
 
-# --- MODELO DO BANCO DE DADOS ---
-class Atendimento(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    nome_paciente = db.Column(db.String(100), nullable=False)
-    data_atendimento = db.Column(db.Date, nullable=False)
-    hora_atendimento = db.Column(db.Time, nullable=False)
-    local = db.Column(db.String(150), nullable=False)
-    status = db.Column(db.String(20), nullable=False, default='Agendado')
+@app.context_processor
+def inject_global_variables():
+    """Injeta variáveis globais em todos os templates."""
+    return {
+        'current_year': datetime.utcnow().year,
+        'today': date.today()
+    }
 
-    def __repr__(self):
-        return f'<Atendimento {self.nome_paciente} em {self.data_atendimento}>'
+# --- ROTAS DE AUTENTICAÇÃO ---
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if current_user.is_authenticated:
+        return redirect(url_for('dashboard'))
+    from forms import RegistrationForm
+    form = RegistrationForm()
+    if form.validate_on_submit():
+        user = User(name=form.name.data, email=form.email.data)
+        user.set_password(form.password.data)
+        db.session.add(user)
+        db.session.commit()
+        flash('Sua conta foi criada com sucesso! Faça o login.', 'success')
+        return redirect(url_for('login'))
+    return render_template('register.html', title='Registrar', form=form)
 
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if current_user.is_authenticated:
+        return redirect(url_for('dashboard'))
+    from forms import LoginForm
+    form = LoginForm()
+    if form.validate_on_submit():
+        user = User.query.filter_by(email=form.email.data).first()
+        if user and user.check_password(form.password.data):
+            login_user(user, remember=form.remember_me.data)
+            next_page = request.args.get('next')
+            return redirect(next_page) if next_page else redirect(url_for('dashboard'))
+        else:
+            flash('Login sem sucesso. Verifique seu email e senha.', 'danger')
+    return render_template('login.html', title='Login', form=form)
 
-# --- COMANDO PARA INICIALIZAR O BANCO DE DADOS ---
-@app.cli.command("init-db")
-def init_db():
-    """Cria todas as tabelas do banco de dados."""
-    db.create_all()
-    print("Banco de dados inicializado e tabelas criadas.")
-
+@app.route('/logout')
+def logout():
+    logout_user()
+    return redirect(url_for('index'))
 
 # --- ROTAS PRINCIPAIS E DE VISUALIZAÇÃO ---
 @app.route('/')
 def index():
-    """Mostra a visão geral e o formulário de navegação."""
+    """Página inicial pública."""
+    return render_template('index.html')
+
+@app.route('/dashboard')
+@login_required
+def dashboard():
+    """Painel principal do usuário logado."""
     hoje = date.today()
-    # No PostgreSQL, pode ser necessário um tratamento diferente para erros de DB.
-    # Por simplicidade, mantemos a query, mas em apps maiores, usar try/except é bom.
-    atendimentos = Atendimento.query.filter(Atendimento.data_atendimento >= hoje).order_by(Atendimento.data_atendimento, Atendimento.hora_atendimento).all()
-    return render_template('index.html', atendimentos=atendimentos, hoje_str=hoje.strftime('%Y-%m-%d'))
+    start_of_day = datetime.combine(hoje, time.min)
+    end_of_day = datetime.combine(hoje, time.max)
+    
+    appointments_today = Appointment.query.filter(
+        Appointment.user_id == current_user.id,
+        Appointment.start_time.between(start_of_day, end_of_day)
+    ).order_by(Appointment.start_time).all()
+
+    total_patients = Patient.query.filter_by(user_id=current_user.id).count()
+    total_appointments_month = Appointment.query.filter(
+        Appointment.user_id == current_user.id,
+        db.extract('month', Appointment.start_time) == hoje.month,
+        db.extract('year', Appointment.start_time) == hoje.year
+    ).count()
+
+    return render_template('dashboard.html', appointments_today=appointments_today, 
+                           total_patients=total_patients, total_appointments_month=total_appointments_month)
 
 @app.route('/agenda')
+@login_required
 def agenda():
-    """Renderiza a página que contém a agenda visual (FullCalendar)."""
+    """Renderiza a página com a agenda FullCalendar."""
     return render_template('agenda_grid.html')
 
-@app.route('/dia/<date_str>')
-def dia(date_str):
-    """Mostra os atendimentos para um dia específico."""
-    target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
-    atendimentos = Atendimento.query.filter_by(data_atendimento=target_date).order_by(Atendimento.hora_atendimento).all()
-    prev_day = (target_date - timedelta(days=1)).strftime('%Y-%m-%d')
-    next_day = (target_date + timedelta(days=1)).strftime('%Y-%m-%d')
-    return render_template('view_filtered.html', atendimentos=atendimentos, view_title=f"Dia: {target_date.strftime('%d/%m/%Y')}", prev_url=url_for('dia', date_str=prev_day), next_url=url_for('dia', date_str=next_day))
+# --- ROTAS PARA PACIENTES E PRONTUÁRIOS ---
+@app.route('/patients')
+@login_required
+def list_patients():
+    """Lista todos os pacientes do profissional."""
+    page = request.args.get('page', 1, type=int)
+    patients = Patient.query.filter_by(user_id=current_user.id).order_by(Patient.full_name).paginate(page=page, per_page=10)
+    return render_template('list_patients.html', patients=patients)
 
-@app.route('/semana/<date_str>')
-def semana(date_str):
-    """Mostra os atendimentos para uma semana específica."""
-    target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
-    start_of_week = target_date - timedelta(days=target_date.weekday())
-    end_of_week = start_of_week + timedelta(days=6)
-    atendimentos = Atendimento.query.filter(Atendimento.data_atendimento.between(start_of_week, end_of_week)).order_by(Atendimento.data_atendimento, Atendimento.hora_atendimento).all()
-    prev_week_date = (start_of_week - timedelta(days=1)).strftime('%Y-%m-%d')
-    next_week_date = (end_of_week + timedelta(days=1)).strftime('%Y-%m-%d')
-    view_title = f"Semana: {start_of_week.strftime('%d/%m')} a {end_of_week.strftime('%d/%m/%Y')}"
-    return render_template('view_filtered.html', atendimentos=atendimentos, view_title=view_title, prev_url=url_for('semana', date_str=prev_week_date), next_url=url_for('semana', date_str=next_week_date))
-
-@app.route('/mes/<int:year>/<int:month>')
-def mes(year, month):
-    """Mostra os atendimentos para um mês e ano específicos."""
-    if not 1 <= month <= 12:
-        return "Mês inválido.", 400
-
-    # Lista de nomes de meses em português para não depender do servidor
-    nomes_meses = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
-    nome_mes_pt = nomes_meses[month - 1]
-    view_title = f"Atendimentos de {nome_mes_pt} de {year}"
-
-    start_of_month = date(year, month, 1)
-    last_day = calendar.monthrange(year, month)[1]
-    end_of_month = date(year, month, last_day)
-
-    atendimentos = Atendimento.query.filter(Atendimento.data_atendimento.between(start_of_month, end_of_month)).order_by(Atendimento.data_atendimento, Atendimento.hora_atendimento).all()
-
-    prev_month_date = start_of_month - timedelta(days=1)
-    next_month_date = end_of_month + timedelta(days=1)
-
-    return render_template(
-        'view_filtered.html',
-        atendimentos=atendimentos,
-        view_title=view_title,
-        prev_url=url_for('mes', year=prev_month_date.year, month=prev_month_date.month),
-        next_url=url_for('mes', year=next_month_date.year, month=next_month_date.month)
-    )
-
-# --- ROTAS DE EDIÇÃO / CRIAÇÃO ---
-@app.route('/add', methods=('GET', 'POST'))
-def add():
-    if request.method == 'POST':
-        nome_paciente = request.form['nome_paciente']
-        data_str = request.form['data_atendimento']
-        hora_str = request.form['hora_atendimento']
-        local = request.form['local']
-        if not all([nome_paciente, data_str, hora_str, local]):
-            flash('Todos os campos são obrigatórios!', 'error')
-        else:
-            novo_atendimento = Atendimento(
-                nome_paciente=nome_paciente,
-                data_atendimento=datetime.strptime(data_str, '%Y-%m-%d').date(),
-                hora_atendimento=datetime.strptime(hora_str, '%H:%M').time(),
-                local=local)
-            db.session.add(novo_atendimento)
-            db.session.commit()
-            flash('Atendimento agendado com sucesso!', 'success')
-            return redirect(url_for('index'))
-    return render_template('add.html')
-
-@app.route('/edit/<int:id>', methods=('GET', 'POST'))
-def edit(id):
-    atendimento = Atendimento.query.get_or_404(id)
-    if request.method == 'POST':
-        atendimento.nome_paciente = request.form['nome_paciente']
-        atendimento.data_atendimento = datetime.strptime(request.form['data_atendimento'], '%Y-%m-%d').date()
-        atendimento.hora_atendimento = datetime.strptime(request.form['hora_atendimento'], '%H:%M').time()
-        atendimento.local = request.form['local']
-        atendimento.status = request.form['status']
+@app.route('/patient/add', methods=['GET', 'POST'])
+@login_required
+def add_patient():
+    from forms import PatientForm
+    form = PatientForm()
+    if form.validate_on_submit():
+        new_patient = Patient(
+            full_name=form.full_name.data,
+            date_of_birth=form.date_of_birth.data,
+            phone=form.phone.data,
+            professional=current_user
+        )
+        db.session.add(new_patient)
         db.session.commit()
-        flash('Atendimento atualizado com sucesso!', 'success')
-        return redirect(request.referrer or url_for('index'))
-    return render_template('edit.html', atendimento=atendimento)
+        flash('Paciente cadastrado com sucesso!', 'success')
+        return redirect(url_for('list_patients'))
+    return render_template('add_edit_patient.html', form=form, title="Adicionar Paciente")
 
-@app.route('/delete/<int:id>')
-def delete(id):
-    atendimento = Atendimento.query.get_or_404(id)
-    db.session.delete(atendimento)
-    db.session.commit()
-    flash('Atendimento removido com sucesso!', 'success')
-    return redirect(url_for('index'))
+@app.route('/patient/<int:patient_id>')
+@login_required
+def patient_detail(patient_id):
+    """Exibe o prontuário e detalhes do paciente."""
+    patient = Patient.query.get_or_404(patient_id)
+    if patient.user_id != current_user.id:
+        flash('Acesso não autorizado.', 'danger')
+        return redirect(url_for('list_patients'))
+    
+    records = patient.records.order_by(ElectronicRecord.record_date.desc()).all()
+    return render_template('patient_detail.html', patient=patient, records=records)
+
+@app.route('/patient/<int:patient_id>/add_record', methods=['GET', 'POST'])
+@login_required
+def add_record(patient_id):
+    from forms import ElectronicRecordForm
+    patient = Patient.query.get_or_404(patient_id)
+    if patient.user_id != current_user.id:
+        return redirect(url_for('list_patients'))
+        
+    form = ElectronicRecordForm()
+    if form.validate_on_submit():
+        record = ElectronicRecord(
+            record_date=datetime.utcnow(),
+            subjective_notes=form.subjective_notes.data,
+            objective_notes=form.objective_notes.data,
+            assessment=form.assessment.data,
+            plan=form.plan.data,
+            patient_id=patient.id
+        )
+        db.session.add(record)
+        db.session.commit()
+        flash('Registro adicionado ao prontuário com sucesso!', 'success')
+        return redirect(url_for('patient_detail', patient_id=patient.id))
+    return render_template('add_record.html', form=form, patient=patient, title="Adicionar ao Prontuário")
+
+# --- ROTAS PARA AGENDAMENTOS ---
+@app.route('/appointment/schedule', methods=['GET', 'POST'])
+@login_required
+def schedule_appointment():
+    from forms import AppointmentForm
+    form = AppointmentForm()
+    form.patient_id.choices = [(p.id, p.full_name) for p in Patient.query.filter_by(user_id=current_user.id).all()]
+    
+    if form.validate_on_submit():
+        start_datetime = datetime.combine(form.date.data, form.time.data)
+        
+        if form.is_recurring.data:
+            recurrence_id = str(uuid.uuid4())
+            for i in range(form.frequency.data):
+                recurrent_start_time = start_datetime + timedelta(weeks=i)
+                appointment = Appointment(
+                    start_time=recurrent_start_time,
+                    location=form.location.data,
+                    notes=form.notes.data,
+                    is_recurring=True,
+                    recurrence_id=recurrence_id,
+                    professional=current_user,
+                    patient_id=form.patient_id.data
+                )
+                db.session.add(appointment)
+            flash(f'{form.frequency.data} sessões recorrentes agendadas com sucesso!', 'success')
+        else:
+            appointment = Appointment(
+                start_time=start_datetime,
+                location=form.location.data,
+                notes=form.notes.data,
+                professional=current_user,
+                patient_id=form.patient_id.data
+            )
+            db.session.add(appointment)
+            flash('Agendamento realizado com sucesso!', 'success')
+        
+        db.session.commit()
+        return redirect(url_for('agenda'))
+    
+    return render_template('add_edit_appointment.html', form=form, title="Novo Agendamento")
+
+@app.route('/appointment/<int:appointment_id>/update_status', methods=['POST'])
+@login_required
+def update_appointment_status(appointment_id):
+    from forms import UpdateAppointmentStatusForm
+    appointment = Appointment.query.get_or_404(appointment_id)
+    if appointment.user_id != current_user.id:
+        return jsonify({'status': 'error', 'message': 'Não autorizado'}), 403
+    
+    form = UpdateAppointmentStatusForm()
+    if form.validate_on_submit():
+        appointment.status = form.status.data
+        db.session.commit()
+        flash('Status do agendamento atualizado.', 'success')
+    else:
+        flash('Ocorreu um erro ao atualizar o status.', 'danger')
+        
+    return redirect(request.referrer or url_for('agenda'))
+    
+# --- ROTA DE RELATÓRIOS ---
+@app.route('/reports')
+@login_required
+def reports():
+    """Página de relatórios e estatísticas."""
+    hoje = date.today()
+    
+    # 1. Contagem de agendamentos por status no mês atual
+    start_of_month = hoje.replace(day=1)
+    appointments_this_month = Appointment.query.filter(
+        Appointment.user_id == current_user.id,
+        Appointment.start_time >= start_of_month
+    ).all()
+    
+    status_counts = {
+        'Concluído': len([a for a in appointments_this_month if a.status == 'Concluído']),
+        'Agendado': len([a for a in appointments_this_month if a.status == 'Agendado']),
+        'Cancelado': len([a for a in appointments_this_month if a.status == 'Cancelado'])
+    }
+    
+    # 2. Novos pacientes nos últimos 6 meses (LÓGICA CORRIGIDA)
+    new_patients_data = {}
+    for i in range(6):
+        # Calcula o primeiro dia do mês alvo
+        # A lógica aqui subtrai meses de forma aproximada, pode ser refinada se necessário
+        target_date = hoje.replace(day=1) - timedelta(days=i * 30) 
+        target_month = target_date.month
+        target_year = target_date.year
+        month_key = target_date.strftime("%b/%Y") # Ex: "Jun/2025"
+        
+        # Conta pacientes cujo campo 'created_at' corresponde ao mês e ano
+        count = Patient.query.filter(
+            Patient.user_id == current_user.id,
+            db.extract('month', Patient.created_at) == target_month,
+            db.extract('year', Patient.created_at) == target_year
+        ).count()
+        new_patients_data[month_key] = count
+        
+    return render_template('reports.html', status_counts=status_counts, new_patients_data=new_patients_data)
 
 # --- API ENDPOINT PARA O FULLCALENDAR ---
-@app.route('/api/atendimentos')
-def api_atendimentos():
-    """Retorna atendimentos em JSON para o FullCalendar."""
-    atendimentos = Atendimento.query.all()
-    eventos = [{
-        'id': aten.id,
-        'title': aten.nome_paciente,
-        'start': f"{aten.data_atendimento.isoformat()}T{aten.hora_atendimento.isoformat()}",
-        'url': url_for('edit', id=aten.id),
-        'color': '#28a745' if aten.status == 'Concluído' else ('#ffc107' if aten.status == 'Confirmado' else '#17a2b8'),
-        'borderColor': '#28a745' if aten.status == 'Concluído' else ('#ffc107' if aten.status == 'Confirmado' else '#17a2b8')
-    } for aten in atendimentos]
+@app.route('/api/appointments')
+@login_required
+def api_appointments():
+    """Retorna agendamentos do usuário logado em JSON para o FullCalendar."""
+    appointments = Appointment.query.filter_by(user_id=current_user.id).all()
+    
+    status_colors = {
+        'Concluído': '#28a745',  # Verde
+        'Agendado': '#0dcaf0',   # Azul claro
+        'Cancelado': '#dc3545'  # Vermelho
+    }
+    
+    eventos = []
+    for appt in appointments:
+        eventos.append({
+            'id': appt.id,
+            'title': appt.patient.full_name,
+            'start': appt.start_time.isoformat(),
+            'color': status_colors.get(appt.status, '#6c757d'),
+            'borderColor': status_colors.get(appt.status, '#6c757d'),
+            'extendedProps': {
+                'location': appt.location,
+                'status': appt.status
+            }
+        })
     return jsonify(eventos)
+
+# --- COMANDO PARA INICIALIZAR O BANCO DE DADOS ---
+@app.cli.command("init-db")
+def init_db_command():
+    """Cria todas as tabelas do banco de dados."""
+    db.create_all()
+    print("Banco de dados inicializado e tabelas criadas.")
+
+if __name__ == '__main__':
+    app.run(debug=True)

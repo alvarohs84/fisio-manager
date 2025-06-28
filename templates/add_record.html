@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-body">
+                <h2 class="card-title text-center">Adicionar Registro para {{ patient.full_name }}</h2>
+                <form method="POST" action="" novalidate>
+                    {{ form.hidden_tag() }}
+                    <div class="mb-3">
+                        {{ form.subjective_notes.label(class="form-label") }}
+                        {{ form.subjective_notes(class="form-control", rows=5) }}
+                    </div>
+                    <div class="mb-3">
+                        {{ form.objective_notes.label(class="form-label") }}
+                        {{ form.objective_notes(class="form-control", rows=5) }}
+                    </div>
+                    <div class="mb-3">
+                        {{ form.assessment.label(class="form-label") }}
+                        {{ form.assessment(class="form-control", rows=5) }}
+                    </div>
+                    <div class="mb-3">
+                        {{ form.plan.label(class="form-label") }}
+                        {{ form.plan(class="form-control", rows=5) }}
+                    </div>
+                    <div class="d-flex justify-content-between">
+                        <a href="{{ url_for('patient_detail', patient_id=patient.id) }}" class="btn btn-secondary">Cancelar</a>
+                        {{ form.submit(class="btn btn-primary") }}
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
