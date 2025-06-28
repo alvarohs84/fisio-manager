@@ -1,7 +1,7 @@
-# forms.py
+# forms.py (COMPLETO E CORRIGIDO)
 
 from flask_wtf import FlaskForm
-from wtforms import StringField, PasswordField, SubmitField, BooleanField, DateField, TimeField, SelectField, IntegerField, TextAreaField
+from wtforms import StringField, PasswordField, SubmitField, BooleanField, DateField, TimeField, SelectField, IntegerField, TextAreaField, MultipleFileField
 from wtforms.validators import DataRequired, Email, EqualTo, ValidationError, Optional
 from models import User
 
@@ -69,6 +69,8 @@ class AssessmentForm(FlaskForm):
     strength_assessment = TextAreaField('Avaliação da Força Muscular (Escala de Kendall, etc.)', validators=[Optional()])
     neuro_assessment = TextAreaField('Avaliação Neurológica', validators=[Optional()])
     functional_assessment = TextAreaField('Avaliação Funcional e Testes Específicos', validators=[Optional()])
+
+    files = MultipleFileField('Exames Complementares (Fotos, Documentos)')
 
     diagnosis = TextAreaField('Diagnóstico Fisioterapêutico', validators=[Optional()])
     goals = TextAreaField('Objetivos (Curto, Médio e Longo Prazo)', validators=[Optional()])
