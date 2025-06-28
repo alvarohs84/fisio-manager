@@ -1,3 +1,5 @@
+# app.py
+
 import os
 import uuid
 from flask import Flask, render_template, redirect, url_for, flash, jsonify, request
@@ -16,7 +18,7 @@ if db_url and db_url.startswith("postgres://"):
 app.config['SQLALCHEMY_DATABASE_URI'] = db_url or 'sqlite:///app.db'
 
 # --- INICIALIZAÇÃO DAS EXTENSÕES ---
-from models import db, User, Patient, Appointment, ElectronicRecord
+from models import db, User, Patient, Appointment, ElectronicRecord, Assessment
 db.init_app(app)
 migrate = Migrate(app, db)
 bcrypt = Bcrypt(app)
@@ -77,13 +79,11 @@ def logout():
 # --- ROTAS PRINCIPAIS E DE VISUALIZAÇÃO ---
 @app.route('/')
 def index():
-    """Página inicial pública."""
     return render_template('index.html')
 
 @app.route('/dashboard')
 @login_required
 def dashboard():
-    """Painel principal do usuário logado."""
     hoje = date.today()
     start_of_day = datetime.combine(hoje, time.min)
     end_of_day = datetime.combine(hoje, time.max)
@@ -106,14 +106,12 @@ def dashboard():
 @app.route('/agenda')
 @login_required
 def agenda():
-    """Renderiza a página com a agenda FullCalendar."""
     return render_template('agenda_grid.html')
 
 # --- ROTAS PARA PACIENTES E PRONTUÁRIOS ---
 @app.route('/patients')
 @login_required
 def list_patients():
-    """Lista todos os pacientes do profissional."""
     page = request.args.get('page', 1, type=int)
     patients = Patient.query.filter_by(user_id=current_user.id).order_by(Patient.full_name).paginate(page=page, per_page=10)
     return render_template('list_patients.html', patients=patients)
@@ -139,14 +137,14 @@ def add_patient():
 @app.route('/patient/<int:patient_id>')
 @login_required
 def patient_detail(patient_id):
-    """Exibe o prontuário e detalhes do paciente."""
     patient = Patient.query.get_or_404(patient_id)
     if patient.user_id != current_user.id:
         flash('Acesso não autorizado.', 'danger')
         return redirect(url_for('list_patients'))
     
     records = patient.records.order_by(ElectronicRecord.record_date.desc()).all()
-    return render_template('patient_detail.html', patient=patient, records=records)
+    assessments = patient.assessments.order_by(Assessment.created_at.desc()).all()
+    return render_template('patient_detail.html', patient=patient, records=records, assessments=assessments)
 
 @app.route('/patient/<int:patient_id>/add_record', methods=['GET', 'POST'])
 @login_required
@@ -171,6 +169,49 @@ def add_record(patient_id):
         flash('Registro adicionado ao prontuário com sucesso!', 'success')
         return redirect(url_for('patient_detail', patient_id=patient.id))
     return render_template('add_record.html', form=form, patient=patient, title="Adicionar ao Prontuário")
+
+# --- ROTAS DE AVALIAÇÃO ---
+@app.route('/patient/<int:patient_id>/add_assessment', methods=['GET', 'POST'])
+@login_required
+def add_assessment(patient_id):
+    from forms import AssessmentForm
+    patient = Patient.query.get_or_404(patient_id)
+    if patient.user_id != current_user.id:
+        return redirect(url_for('list_patients'))
+
+    form = AssessmentForm()
+    if form.validate_on_submit():
+        assessment = Assessment(
+            patient_id=patient.id,
+            main_complaint=form.main_complaint.data,
+            history_of_present_illness=form.history_of_present_illness.data,
+            past_medical_history=form.past_medical_history.data,
+            medications=form.medications.data,
+            social_history=form.social_history.data,
+            inspection_notes=form.inspection_notes.data,
+            palpation_notes=form.palpation_notes.data,
+            mobility_assessment=form.mobility_assessment.data,
+            strength_assessment=form.strength_assessment.data,
+            neuro_assessment=form.neuro_assessment.data,
+            functional_assessment=form.functional_assessment.data,
+            diagnosis=form.diagnosis.data,
+            goals=form.goals.data,
+            treatment_plan=form.treatment_plan.data
+        )
+        db.session.add(assessment)
+        db.session.commit()
+        flash('Nova avaliação salva com sucesso!', 'success')
+        return redirect(url_for('patient_detail', patient_id=patient.id))
+    return render_template('add_assessment.html', title='Nova Avaliação', form=form, patient=patient)
+
+@app.route('/assessment/<int:assessment_id>')
+@login_required
+def view_assessment(assessment_id):
+    assessment = Assessment.query.get_or_404(assessment_id)
+    if assessment.patient.user_id != current_user.id:
+        flash('Acesso não autorizado.', 'danger')
+        return redirect(url_for('list_patients'))
+    return render_template('view_assessment.html', title='Detalhes da Avaliação', assessment=assessment)
 
 # --- ROTAS PARA AGENDAMENTOS ---
 @app.route('/appointment/schedule', methods=['GET', 'POST'])
@@ -236,10 +277,8 @@ def update_appointment_status(appointment_id):
 @app.route('/reports')
 @login_required
 def reports():
-    """Página de relatórios e estatísticas."""
     hoje = date.today()
     
-    # 1. Contagem de agendamentos por status no mês atual
     start_of_month = hoje.replace(day=1)
     appointments_this_month = Appointment.query.filter(
         Appointment.user_id == current_user.id,
@@ -252,17 +291,13 @@ def reports():
         'Cancelado': len([a for a in appointments_this_month if a.status == 'Cancelado'])
     }
     
-    # 2. Novos pacientes nos últimos 6 meses (LÓGICA CORRIGIDA)
     new_patients_data = {}
     for i in range(6):
-        # Calcula o primeiro dia do mês alvo
-        # A lógica aqui subtrai meses de forma aproximada, pode ser refinada se necessário
-        target_date = hoje.replace(day=1) - timedelta(days=i * 30) 
+        target_date = hoje.replace(day=1) - timedelta(days=i * 30)
         target_month = target_date.month
         target_year = target_date.year
-        month_key = target_date.strftime("%b/%Y") # Ex: "Jun/2025"
+        month_key = target_date.strftime("%b/%Y")
         
-        # Conta pacientes cujo campo 'created_at' corresponde ao mês e ano
         count = Patient.query.filter(
             Patient.user_id == current_user.id,
             db.extract('month', Patient.created_at) == target_month,
@@ -276,13 +311,12 @@ def reports():
 @app.route('/api/appointments')
 @login_required
 def api_appointments():
-    """Retorna agendamentos do usuário logado em JSON para o FullCalendar."""
     appointments = Appointment.query.filter_by(user_id=current_user.id).all()
     
     status_colors = {
-        'Concluído': '#28a745',  # Verde
-        'Agendado': '#0dcaf0',   # Azul claro
-        'Cancelado': '#dc3545'  # Vermelho
+        'Concluído': '#28a745',
+        'Agendado': '#0dcaf0',
+        'Cancelado': '#dc3545'
     }
     
     eventos = []
@@ -303,7 +337,6 @@ def api_appointments():
 # --- COMANDO PARA INICIALIZAR O BANCO DE DADOS ---
 @app.cli.command("init-db")
 def init_db_command():
-    """Cria todas as tabelas do banco de dados."""
     db.create_all()
     print("Banco de dados inicializado e tabelas criadas.")
 

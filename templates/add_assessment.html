@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-10">
+        <div class="card shadow-sm mb-4">
+            <div class="card-body">
+                <h2 class="card-title text-center mb-4">Nova Avaliação para {{ patient.full_name }}</h2>
+                <form method="POST" action="" novalidate>
+                    {{ form.hidden_tag() }}
+                    
+                    <h4 class="mt-4 text-primary border-bottom pb-2 mb-3">Anamnese</h4>
+                    <div class="mb-3">
+                        {{ form.main_complaint.label(class="form-label fw-bold") }}
+                        {{ form.main_complaint(class="form-control", rows=4) }}
+                    </div>
+                    <div class="mb-3">
+                        {{ form.history_of_present_illness.label(class="form-label fw-bold") }}
+                        {{ form.history_of_present_illness(class="form-control", rows=4) }}
+                    </div>
+                    <div class="mb-3">
+                        {{ form.past_medical_history.label(class="form-label fw-bold") }}
+                        {{ form.past_medical_history(class="form-control", rows=4) }}
+                    </div>
+                    <div class="mb-3">
+                        {{ form.medications.label(class="form-label fw-bold") }}
+                        {{ form.medications(class="form-control", rows=2) }}
+                    </div>
+                    <div class="mb-3">
+                        {{ form.social_history.label(class="form-label fw-bold") }}
+                        {{ form.social_history(class="form-control", rows=3) }}
+                    </div>
+
+                    <h4 class="mt-5 text-primary border-bottom pb-2 mb-3">Exame Físico</h4>
+                    <div class="mb-3">
+                        {{ form.inspection_notes.label(class="form-label fw-bold") }}
+                        {{ form.inspection_notes(class="form-control", rows=4) }}
+                    </div>
+                    <div class="mb-3">
+                        {{ form.palpation_notes.label(class="form-label fw-bold") }}
+                        {{ form.palpation_notes(class="form-control", rows=4) }}
+                    </div>
+                    <div class="mb-3">
+                        {{ form.mobility_assessment.label(class="form-label fw-bold") }}
+                        {{ form.mobility_assessment(class="form-control", rows=4) }}
+                    </div>
+                    <div class="mb-3">
+                        {{ form.strength_assessment.label(class="form-label fw-bold") }}
+                        {{ form.strength_assessment(class="form-control", rows=4) }}
+                    </div>
+                    <div class="mb-3">
+                        {{ form.neuro_assessment.label(class="form-label fw-bold") }}
+                        {{ form.neuro_assessment(class="form-control", rows=4) }}
+                    </div>
+                    <div class="mb-3">
+                        {{ form.functional_assessment.label(class="form-label fw-bold") }}
+                        {{ form.functional_assessment(class="form-control", rows=4) }}
+                    </div>
+
+                    <h4 class="mt-5 text-primary border-bottom pb-2 mb-3">Conclusão e Plano</h4>
+                    <div class="mb-3">
+                        {{ form.diagnosis.label(

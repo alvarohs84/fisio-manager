@@ -1,9 +1,9 @@
-# models.py (CORRIGIDO)
+# models.py
 
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
-from datetime import date, datetime # <--- ADICIONE/CONFIRME ESTE IMPORT
+from datetime import date, datetime
 
 db = SQLAlchemy()
 
@@ -32,12 +32,13 @@ class Patient(db.Model):
     full_name = db.Column(db.String(150), nullable=False, index=True)
     date_of_birth = db.Column(db.Date, nullable=False)
     phone = db.Column(db.String(20))
-    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow) # Agora 'datetime' é reconhecido
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     
     appointments = db.relationship('Appointment', backref='patient', lazy='dynamic', cascade="all, delete-orphan")
     records = db.relationship('ElectronicRecord', backref='patient', lazy='dynamic', cascade="all, delete-orphan")
+    assessments = db.relationship('Assessment', backref='patient', lazy='dynamic', cascade="all, delete-orphan")
 
     @property
     def age(self):
@@ -48,7 +49,7 @@ class Patient(db.Model):
         return f'<Patient {self.full_name}>'
 
 class Appointment(db.Model):
-    """Modelo para o Agendamento (antigo Atendimento)"""
+    """Modelo para o Agendamento"""
     id = db.Column(db.Integer, primary_key=True)
     start_time = db.Column(db.DateTime, nullable=False)
     location = db.Column(db.String(150), nullable=False)
@@ -67,7 +68,7 @@ class Appointment(db.Model):
 class ElectronicRecord(db.Model):
     """Modelo para cada registro no Prontuário Eletrônico"""
     id = db.Column(db.Integer, primary_key=True)
-    record_date = db.Column(db.DateTime, nullable=False, default=datetime.utcnow) # Também podemos usar aqui
+    record_date = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     subjective_notes = db.Column(db.Text, nullable=False)
     objective_notes = db.Column(db.Text, nullable=False)
     assessment = db.Column(db.Text, nullable=False)
@@ -77,3 +78,30 @@ class ElectronicRecord(db.Model):
     
     def __repr__(self):
         return f'<Record for {self.patient.full_name} on {self.record_date}>'
+
+class Assessment(db.Model):
+    """Modelo para a Avaliação Fisioterapêutica completa."""
+    id = db.Column(db.Integer, primary_key=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    patient_id = db.Column(db.Integer, db.ForeignKey('patient.id'), nullable=False)
+
+    main_complaint = db.Column(db.Text, nullable=True)
+    history_of_present_illness = db.Column(db.Text, nullable=True)
+    past_medical_history = db.Column(db.Text, nullable=True)
+    medications = db.Column(db.Text, nullable=True)
+    social_history = db.Column(db.Text, nullable=True)
+    
+    inspection_notes = db.Column(db.Text, nullable=True)
+    palpation_notes = db.Column(db.Text, nullable=True)
+    mobility_assessment = db.Column(db.Text, nullable=True)
+    strength_assessment = db.Column(db.Text, nullable=True)
+    neuro_assessment = db.Column(db.Text, nullable=True)
+    functional_assessment = db.Column(db.Text, nullable=True)
+
+    diagnosis = db.Column(db.Text, nullable=True)
+    goals = db.Column(db.Text, nullable=True)
+    treatment_plan = db.Column(db.Text, nullable=True)
+
+    def __repr__(self):
+        return f'<Assessment for {self.patient.full_name} on {self.created_at}>'
