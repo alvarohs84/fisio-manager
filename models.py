@@ -69,6 +69,9 @@ class ElectronicRecord(db.Model):
     """Modelo para cada registro no Prontuário Eletrônico"""
     id = db.Column(db.Integer, primary_key=True)
     record_date = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    
+    medical_diagnosis = db.Column(db.Text, nullable=True) # Diagnóstico Médico (opcional)
+
     subjective_notes = db.Column(db.Text, nullable=False)
     objective_notes = db.Column(db.Text, nullable=False)
     assessment = db.Column(db.Text, nullable=False)
@@ -99,9 +102,23 @@ class Assessment(db.Model):
     neuro_assessment = db.Column(db.Text, nullable=True)
     functional_assessment = db.Column(db.Text, nullable=True)
 
+    files = db.relationship('UploadedFile', backref='assessment', lazy='dynamic', cascade="all, delete-orphan")
+
     diagnosis = db.Column(db.Text, nullable=True)
     goals = db.Column(db.Text, nullable=True)
     treatment_plan = db.Column(db.Text, nullable=True)
 
     def __repr__(self):
         return f'<Assessment for {self.patient.full_name} on {self.created_at}>'
+
+class UploadedFile(db.Model):
+    """Modelo para cada ficheiro enviado."""
+    id = db.Column(db.Integer, primary_key=True)
+    public_id = db.Column(db.String(255), nullable=False)
+    secure_url = db.Column(db.String(512), nullable=False)
+    resource_type = db.Column(db.String(50), nullable=False)
+    
+    assessment_id = db.Column(db.Integer, db.ForeignKey('assessment.id'), nullable=False)
+
+    def __repr__(self):
+        return f'<File {self.public_id}>'

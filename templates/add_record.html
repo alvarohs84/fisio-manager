@@ -8,6 +8,12 @@
                 <h2 class="card-title text-center">Adicionar Registro para {{ patient.full_name }}</h2>
                 <form method="POST" action="" novalidate>
                     {{ form.hidden_tag() }}
+
+                    <div class="mb-3">
+                        {{ form.medical_diagnosis.label(class="form-label") }}
+                        {{ form.medical_diagnosis(class="form-control", rows=2) }}
+                    </div>
+
                     <div class="mb-3">
                         {{ form.subjective_notes.label(class="form-label") }}
                         {{ form.subjective_notes(class="form-control", rows=5) }}

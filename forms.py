@@ -1,4 +1,4 @@
-# forms.py (COMPLETO E CORRIGIDO)
+# forms.py
 
 from flask_wtf import FlaskForm
 from wtforms import StringField, PasswordField, SubmitField, BooleanField, DateField, TimeField, SelectField, IntegerField, TextAreaField, MultipleFileField
@@ -50,6 +50,7 @@ class UpdateAppointmentStatusForm(FlaskForm):
     submit = SubmitField('Atualizar')
 
 class ElectronicRecordForm(FlaskForm):
+    medical_diagnosis = TextAreaField('Diagnóstico Médico (opcional)', validators=[Optional()])
     subjective_notes = TextAreaField('Subjetivo (relato do paciente)', validators=[DataRequired()])
     objective_notes = TextAreaField('Objetivo (sua avaliação)', validators=[DataRequired()])
     assessment = TextAreaField('Diagnóstico Fisioterapêutico', validators=[DataRequired()])

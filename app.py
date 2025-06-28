@@ -8,6 +8,9 @@ from flask_migrate import Migrate
 from flask_login import LoginManager, current_user, login_user, logout_user, login_required
 from flask_bcrypt import Bcrypt
 from datetime import datetime, date, time, timedelta
+import cloudinary
+import cloudinary.uploader
+import cloudinary.api
 
 # --- CONFIGURAÇÃO DA APLICAÇÃO ---
 app = Flask(__name__)
@@ -18,7 +21,7 @@ if db_url and db_url.startswith("postgres://"):
 app.config['SQLALCHEMY_DATABASE_URI'] = db_url or 'sqlite:///app.db'
 
 # --- INICIALIZAÇÃO DAS EXTENSÕES ---
-from models import db, User, Patient, Appointment, ElectronicRecord, Assessment
+from models import db, User, Patient, Appointment, ElectronicRecord, Assessment, UploadedFile
 db.init_app(app)
 migrate = Migrate(app, db)
 bcrypt = Bcrypt(app)
@@ -26,6 +29,14 @@ login_manager = LoginManager(app)
 login_manager.login_view = 'login'
 login_manager.login_message = 'Por favor, faça o login para acessar esta página.'
 login_manager.login_message_category = 'info'
+
+# --- CONFIGURAÇÃO DO CLOUDINARY ---
+cloudinary.config(
+    cloud_name = os.environ.get('CLOUDINARY_CLOUD_NAME'),
+    api_key = os.environ.get('CLOUDINARY_API_KEY'),
+    api_secret = os.environ.get('CLOUDINARY_API_SECRET'),
+    secure = True
+)
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -108,7 +119,7 @@ def dashboard():
 def agenda():
     return render_template('agenda_grid.html')
 
-# --- ROTAS PARA PACIENTES E PRONTUÁRIOS ---
+# --- ROTAS PARA PACIENTES ---
 @app.route('/patients')
 @login_required
 def list_patients():
@@ -146,6 +157,7 @@ def patient_detail(patient_id):
     assessments = patient.assessments.order_by(Assessment.created_at.desc()).all()
     return render_template('patient_detail.html', patient=patient, records=records, assessments=assessments)
 
+# --- ROTAS DE PRONTUÁRIO E AVALIAÇÃO ---
 @app.route('/patient/<int:patient_id>/add_record', methods=['GET', 'POST'])
 @login_required
 def add_record(patient_id):
@@ -158,6 +170,7 @@ def add_record(patient_id):
     if form.validate_on_submit():
         record = ElectronicRecord(
             record_date=datetime.utcnow(),
+            medical_diagnosis=form.medical_diagnosis.data,
             subjective_notes=form.subjective_notes.data,
             objective_notes=form.objective_notes.data,
             assessment=form.assessment.data,
@@ -170,7 +183,6 @@ def add_record(patient_id):
         return redirect(url_for('patient_detail', patient_id=patient.id))
     return render_template('add_record.html', form=form, patient=patient, title="Adicionar ao Prontuário")
 
-# --- ROTAS DE AVALIAÇÃO ---
 @app.route('/patient/<int:patient_id>/add_assessment', methods=['GET', 'POST'])
 @login_required
 def add_assessment(patient_id):
@@ -200,8 +212,23 @@ def add_assessment(patient_id):
         )
         db.session.add(assessment)
         db.session.commit()
+
+        files = request.files.getlist(form.files.name)
+        for file in files:
+            if file:
+                upload_result = cloudinary.uploader.upload(file)
+                new_file = UploadedFile(
+                    public_id=upload_result['public_id'],
+                    secure_url=upload_result['secure_url'],
+                    resource_type=upload_result['resource_type'],
+                    assessment_id=assessment.id
+                )
+                db.session.add(new_file)
+
+        db.session.commit()
         flash('Nova avaliação salva com sucesso!', 'success')
         return redirect(url_for('patient_detail', patient_id=patient.id))
+        
     return render_template('add_assessment.html', title='Nova Avaliação', form=form, patient=patient)
 
 @app.route('/assessment/<int:assessment_id>')

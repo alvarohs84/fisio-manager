@@ -1,0 +1,36 @@
+{% if records %}
+    <div class="accordion" id="prontuarioAccordion">
+        {% for record in records %}
+            <div class="accordion-item">
+                <h2 class="accordion-header" id="heading{{ record.id }}">
+                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse{{ record.id }}">
+                        <strong>Registro de {{ record.record_date.strftime('%d/%m/%Y às %H:%M') }}</strong>
+                    </button>
+                </h2>
+                <div id="collapse{{ record.id }}" class="accordion-collapse collapse" data-bs-parent="#prontuarioAccordion">
+                    <div class="accordion-body">
+                        {% if record.medical_diagnosis %}
+                            <h5 class="text-danger">Diagnóstico Médico</h5>
+                            <p style="white-space: pre-wrap;">{{ record.medical_diagnosis }}</p>
+                            <hr>
+                        {% endif %}
+
+                        <h5 class="text-secondary">Subjetivo</h5>
+                        <p style="white-space: pre-wrap;">{{ record.subjective_notes }}</p>
+                        <hr>
+                        <h5 class="text-secondary">Objetivo</h5>
+                        <p style="white-space: pre-wrap;">{{ record.objective_notes }}</p>
+                        <hr>
+                        <h5 class="text-secondary">Diagnóstico Fisioterapêutico</h5>
+                        <p style="white-space: pre-wrap;">{{ record.assessment }}</p>
+                        <hr>
+                        <h5 class="text-secondary">Plano</h5>
+                        <p style="white-space: pre-wrap;">{{ record.plan }}</p>
+                    </div>
+                </div>
+            </div>
+        {% endfor %}
+    </div>
+{% else %}
+    <div class="alert alert-light">Nenhum registro encontrado no prontuário deste paciente.</div>
+{% endif %}
