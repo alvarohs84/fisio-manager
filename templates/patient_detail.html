@@ -25,16 +25,16 @@
                 <div id="collapse{{ record.id }}" class="accordion-collapse collapse" aria-labelledby="heading{{ record.id }}" data-bs-parent="#prontuarioAccordion">
                     <div class="accordion-body">
                         <h5>Subjetivo (Relato do Paciente)</h5>
-                        <p>{{ record.subjective_notes|nl2br }}</p>
+                        <p style="white-space: pre-wrap;">{{ record.subjective_notes }}</p>
                         <hr>
                         <h5>Objetivo (Sua Avaliação)</h5>
-                        <p>{{ record.objective_notes|nl2br }}</p>
+                        <p style="white-space: pre-wrap;">{{ record.objective_notes }}</p>
                         <hr>
                         <h5>Diagnóstico Fisioterapêutico</h5>
-                        <p>{{ record.assessment|nl2br }}</p>
+                        <p style="white-space: pre-wrap;">{{ record.assessment }}</p>
                         <hr>
                         <h5>Plano de Tratamento</h5>
-                        <p>{{ record.plan|nl2br }}</p>
+                        <p style="white-space: pre-wrap;">{{ record.plan }}</p>
                     </div>
                 </div>
             </div>
