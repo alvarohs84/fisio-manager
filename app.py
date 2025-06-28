@@ -4,15 +4,20 @@ import calendar
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
 from flask_sqlalchemy import SQLAlchemy
 
-# --- CONFIGURAÇÃO ---
+# --- CONFIGURAÇÃO DA APLICAÇÃO ---
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'uma-chave-secreta-muito-segura-e-diferente'
 
-# Configuração do Banco de Dados SQLite
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+# --- CONFIGURAÇÃO DO BANCO DE DADOS ---
+# A URL será lida da variável de ambiente no servidor do Render,
+# garantindo a conexão com o banco de dados PostgreSQL persistente.
+db_url = os.environ.get('DATABASE_URL')
+if db_url and db_url.startswith("postgres://"):
+    db_url = db_url.replace("postgres://", "postgresql://", 1)
+app.config['SQLALCHEMY_DATABASE_URI'] = db_url
 
 db = SQLAlchemy(app)
+
 
 # --- MODELO DO BANCO DE DADOS ---
 class Atendimento(db.Model):
@@ -26,18 +31,22 @@ class Atendimento(db.Model):
     def __repr__(self):
         return f'<Atendimento {self.nome_paciente} em {self.data_atendimento}>'
 
-# --- COMANDO PARA INICIALIZAR O DB ---
+
+# --- COMANDO PARA INICIALIZAR O BANCO DE DADOS ---
 @app.cli.command("init-db")
 def init_db():
     """Cria todas as tabelas do banco de dados."""
     db.create_all()
     print("Banco de dados inicializado e tabelas criadas.")
 
+
 # --- ROTAS PRINCIPAIS E DE VISUALIZAÇÃO ---
 @app.route('/')
 def index():
     """Mostra a visão geral e o formulário de navegação."""
     hoje = date.today()
+    # No PostgreSQL, pode ser necessário um tratamento diferente para erros de DB.
+    # Por simplicidade, mantemos a query, mas em apps maiores, usar try/except é bom.
     atendimentos = Atendimento.query.filter(Atendimento.data_atendimento >= hoje).order_by(Atendimento.data_atendimento, Atendimento.hora_atendimento).all()
     return render_template('index.html', atendimentos=atendimentos, hoje_str=hoje.strftime('%Y-%m-%d'))
 
@@ -70,21 +79,35 @@ def semana(date_str):
 @app.route('/mes/<int:year>/<int:month>')
 def mes(year, month):
     """Mostra os atendimentos para um mês e ano específicos."""
+    if not 1 <= month <= 12:
+        return "Mês inválido.", 400
+
+    # Lista de nomes de meses em português para não depender do servidor
+    nomes_meses = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
+    nome_mes_pt = nomes_meses[month - 1]
+    view_title = f"Atendimentos de {nome_mes_pt} de {year}"
+
     start_of_month = date(year, month, 1)
     last_day = calendar.monthrange(year, month)[1]
     end_of_month = date(year, month, last_day)
+
     atendimentos = Atendimento.query.filter(Atendimento.data_atendimento.between(start_of_month, end_of_month)).order_by(Atendimento.data_atendimento, Atendimento.hora_atendimento).all()
+
     prev_month_date = start_of_month - timedelta(days=1)
     next_month_date = end_of_month + timedelta(days=1)
-    locale_pt_br = calendar.LocaleHTMLCalendar(locale='pt_BR').formatmonthname(year, month, 0)
-    view_title = f"Mês: {locale_pt_br.capitalize()}"
-    return render_template('view_filtered.html', atendimentos=atendimentos, view_title=view_title, prev_url=url_for('mes', year=prev_month_date.year, month=prev_month_date.month), next_url=url_for('mes', year=next_month_date.year, month=next_month_date.month))
+
+    return render_template(
+        'view_filtered.html',
+        atendimentos=atendimentos,
+        view_title=view_title,
+        prev_url=url_for('mes', year=prev_month_date.year, month=prev_month_date.month),
+        next_url=url_for('mes', year=next_month_date.year, month=next_month_date.month)
+    )
 
 # --- ROTAS DE EDIÇÃO / CRIAÇÃO ---
 @app.route('/add', methods=('GET', 'POST'))
 def add():
     if request.method == 'POST':
-        # (Lógica para adicionar atendimento)
         nome_paciente = request.form['nome_paciente']
         data_str = request.form['data_atendimento']
         hora_str = request.form['hora_atendimento']
@@ -107,7 +130,6 @@ def add():
 def edit(id):
     atendimento = Atendimento.query.get_or_404(id)
     if request.method == 'POST':
-        # (Lógica para editar atendimento)
         atendimento.nome_paciente = request.form['nome_paciente']
         atendimento.data_atendimento = datetime.strptime(request.form['data_atendimento'], '%Y-%m-%d').date()
         atendimento.hora_atendimento = datetime.strptime(request.form['hora_atendimento'], '%H:%M').time()
