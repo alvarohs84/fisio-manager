@@ -6,7 +6,7 @@
         <div class="card shadow-sm mb-4">
             <div class="card-body">
                 <h2 class="card-title text-center mb-4">Nova Avaliação para {{ patient.full_name }}</h2>
-                <form method="POST" action="" novalidate>
+                <form method="POST" action="" novalidate enctype="multipart/form-data">
                     {{ form.hidden_tag() }}
                     
                     <h4 class="mt-4 text-primary border-bottom pb-2 mb-3">Anamnese</h4>
@@ -57,6 +57,33 @@
                         {{ form.functional_assessment(class="form-control", rows=4) }}
                     </div>
 
+                    <h4 class="mt-5 text-primary border-bottom pb-2 mb-3">Ficheiros</h4>
+                    <div class="mb-3">
+                        {{ form.files.label(class="form-label fw-bold") }}
+                        {{ form.files(class="form-control", multiple=True) }}
+                    </div>
+
                     <h4 class="mt-5 text-primary border-bottom pb-2 mb-3">Conclusão e Plano</h4>
                     <div class="mb-3">
-                        {{ form.diagnosis.label(
+                        {{ form.diagnosis.label(class="form-label fw-bold") }}
+                        {{ form.diagnosis(class="form-control", rows=4) }}
+                    </div>
+                    <div class="mb-3">
+                        {{ form.goals.label(class="form-label fw-bold") }}
+                        {{ form.goals(class="form-control", rows=4) }}
+                    </div>
+                    <div class="mb-3">
+                        {{ form.treatment_plan.label(class="form-label fw-bold") }}
+                        {{ form.treatment_plan(class="form-control", rows=4) }}
+                    </div>
+
+                    <div class="d-flex justify-content-between mt-4">
+                        <a href="{{ url_for('patient_detail', patient_id=patient.id) }}" class="btn btn-secondary">Cancelar</a>
+                        {{ form.submit(class="btn btn-primary") }}
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
