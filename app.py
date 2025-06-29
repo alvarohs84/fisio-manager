@@ -123,9 +123,18 @@ def agenda():
 @app.route('/patients')
 @login_required
 def list_patients():
+    """Lista todos os pacientes do profissional, com suporte para pesquisa."""
     page = request.args.get('page', 1, type=int)
-    patients = Patient.query.filter_by(user_id=current_user.id).order_by(Patient.full_name).paginate(page=page, per_page=10)
-    return render_template('list_patients.html', patients=patients)
+    search_query = request.args.get('q', '')
+
+    patients_query = Patient.query.filter_by(user_id=current_user.id)
+
+    if search_query:
+        patients_query = patients_query.filter(Patient.full_name.ilike(f'%{search_query}%'))
+
+    patients = patients_query.order_by(Patient.full_name).paginate(page=page, per_page=10)
+    
+    return render_template('list_patients.html', patients=patients, search_query=search_query)
 
 @app.route('/patient/add', methods=['GET', 'POST'])
 @login_required
@@ -151,16 +160,14 @@ def add_patient():
 @login_required
 def edit_patient(patient_id):
     patient = Patient.query.get_or_404(patient_id)
-    # Garante que o usuário só pode editar seus próprios pacientes
     if patient.user_id != current_user.id:
         flash('Acesso não autorizado.', 'danger')
         return redirect(url_for('list_patients'))
     
     from forms import PatientForm
-    form = PatientForm(obj=patient) # Pré-preenche o formulário com dados do paciente
+    form = PatientForm(obj=patient)
 
     if form.validate_on_submit():
-        # Atualiza os dados do objeto paciente com os dados do formulário
         patient.full_name = form.full_name.data
         patient.date_of_birth = form.date_of_birth.data
         patient.gender = form.gender.data
@@ -171,7 +178,6 @@ def edit_patient(patient_id):
         return redirect(url_for('list_patients'))
     
     return render_template('add_edit_patient.html', form=form, title="Editar Paciente")
-
 
 @app.route('/patient/<int:patient_id>')
 @login_required

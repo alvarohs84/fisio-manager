@@ -6,6 +6,19 @@
     <a href="{{ url_for('add_patient') }}" class="btn btn-success">Adicionar Paciente</a>
 </div>
 
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="GET" action="{{ url_for('list_patients') }}" class="d-flex">
+            <input class="form-control me-2" type="search" name="q" placeholder="Pesquisar por nome..." aria-label="Pesquisar" value="{{ search_query or '' }}">
+            <button class="btn btn-outline-primary" type="submit">Pesquisar</button>
+        </form>
+    </div>
+</div>
+
+{% if search_query %}
+    <h4 class="mb-3">Resultados para: <span class="text-primary">{{ search_query }}</span></h4>
+{% endif %}
+
 <div class="card">
     <div class="card-body">
         {% if patients.items %}
@@ -41,7 +54,7 @@
             </table>
         </div>
         {% else %}
-        <div class="alert alert-info">Você ainda não cadastrou nenhum paciente.</div>
+        <div class="alert alert-warning">Nenhum paciente encontrado com os critérios de pesquisa.</div>
         {% endif %}
     </div>
 </div>
@@ -49,7 +62,7 @@
 <nav aria-label="Navegação de pacientes" class="mt-4">
     <ul class="pagination justify-content-center">
         {% if patients.has_prev %}
-            <li class="page-item"><a class="page-link" href="{{ url_for('list_patients', page=patients.prev_num) }}">Anterior</a></li>
+            <li class="page-item"><a class="page-link" href="{{ url_for('list_patients', page=patients.prev_num, q=search_query) }}">Anterior</a></li>
         {% else %}
             <li class="page-item disabled"><a class="page-link" href="#">Anterior</a></li>
         {% endif %}
@@ -57,7 +70,7 @@
         {% for page_num in patients.iter_pages() %}
             {% if page_num %}
                 <li class="page-item {% if page_num == patients.page %}active{% endif %}">
-                    <a class="page-link" href="{{ url_for('list_patients', page=page_num) }}">{{ page_num }}</a>
+                    <a class="page-link" href="{{ url_for('list_patients', page=page_num, q=search_query) }}">{{ page_num }}</a>
                 </li>
             {% else %}
                 <li class="page-item disabled"><span class="page-link">...</span></li>
@@ -65,7 +78,7 @@
         {% endfor %}
 
         {% if patients.has_next %}
-            <li class="page-item"><a class="page-link" href="{{ url_for('list_patients', page=patients.next_num) }}">Próxima</a></li>
+            <li class="page-item"><a class="page-link" href="{{ url_for('list_patients', page=patients.next_num, q=search_query) }}">Próxima</a></li>
         {% else %}
             <li class="page-item disabled"><a class="page-link" href="#">Próxima</a></li>
         {% endif %}
