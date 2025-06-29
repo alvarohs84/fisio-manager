@@ -1,4 +1,4 @@
-# app.py (COMPLETO E CORRIGIDO)
+# app.py (COMPLETO E ATUALIZADO)
 
 import os
 import uuid
@@ -11,7 +11,7 @@ from datetime import datetime, date, time, timedelta
 import cloudinary
 import cloudinary.uploader
 import cloudinary.api
-from sqlalchemy import func # <-- Certifique-se de que 'func' está importado
+from sqlalchemy import func, extract
 
 # --- CONFIGURAÇÃO DA APLICAÇÃO ---
 app = Flask(__name__)
@@ -52,7 +52,6 @@ def inject_global_variables():
     }
 
 # --- ROTAS DE AUTENTICAÇÃO ---
-# ... (sem alterações)
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if current_user.is_authenticated: return redirect(url_for('dashboard'))
@@ -88,7 +87,6 @@ def logout():
     return redirect(url_for('index'))
 
 # --- ROTAS PRINCIPAIS E DE VISUALIZAÇÃO ---
-# ... (sem alterações)
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -96,13 +94,32 @@ def index():
 @app.route('/dashboard')
 @login_required
 def dashboard():
-    hoje = date.today()
-    start_of_day = datetime.combine(hoje, time.min)
-    end_of_day = datetime.combine(hoje, time.max)
-    appointments_today = Appointment.query.filter(Appointment.user_id == current_user.id, Appointment.start_time.between(start_of_day, end_of_day)).order_by(Appointment.start_time).all()
-    total_patients = Patient.query.filter_by(user_id=current_user.id).count()
-    total_appointments_month = Appointment.query.filter(Appointment.user_id == current_user.id, db.extract('month', Appointment.start_time) == hoje.month, db.extract('year', Appointment.start_time) == hoje.year).count()
-    return render_template('dashboard.html', appointments_today=appointments_today, total_patients=total_patients, total_appointments_month=total_appointments_month)
+    hoje = datetime.utcnow() # Usar datetime para comparações de tempo
+    
+    # Widget 1: Próximos 5 agendamentos
+    proximos_agendamentos = Appointment.query.filter(
+        Appointment.user_id == current_user.id,
+        Appointment.start_time >= hoje
+    ).order_by(Appointment.start_time.asc()).limit(5).all()
+
+    # Widget 2: Últimos 5 pacientes adicionados
+    ultimos_pacientes = Patient.query.filter_by(
+        user_id=current_user.id
+    ).order_by(Patient.created_at.desc()).limit(5).all()
+
+    # Widget 3: Aniversariantes do mês
+    aniversariantes_do_mes = Patient.query.filter(
+        Patient.user_id == current_user.id,
+        extract('month', Patient.date_of_birth) == hoje.month
+    ).order_by(extract('day', Patient.date_of_birth).asc()).all()
+
+    return render_template(
+        'dashboard.html',
+        proximos_agendamentos=proximos_agendamentos,
+        ultimos_pacientes=ultimos_pacientes,
+        aniversariantes_do_mes=aniversariantes_do_mes
+    )
+
 
 @app.route('/agenda')
 @login_required
@@ -110,7 +127,6 @@ def agenda():
     return render_template('agenda_grid.html')
 
 # --- ROTAS PARA PACIENTES ---
-# ... (sem alterações)
 @app.route('/patients')
 @login_required
 def list_patients():
@@ -165,7 +181,6 @@ def patient_detail(patient_id):
     return render_template('patient_detail.html', patient=patient, records=records, assessments=assessments)
 
 # --- ROTAS DE PRONTUÁRIO E AVALIAÇÃO ---
-# ... (sem alterações)
 @app.route('/patient/<int:patient_id>/add_record', methods=['GET', 'POST'])
 @login_required
 def add_record(patient_id):
@@ -213,7 +228,6 @@ def view_assessment(assessment_id):
     return render_template('view_assessment.html', title='Detalhes da Avaliação', assessment=assessment)
 
 # --- ROTAS PARA AGENDAMENTOS E APIS ---
-# ... (sem alterações)
 @app.route('/appointment/schedule', methods=['GET', 'POST'])
 @login_required
 def schedule_appointment():
@@ -290,33 +304,29 @@ def api_patients():
     patients = Patient.query.filter_by(user_id=current_user.id).order_by(Patient.full_name).all()
     return jsonify([{'id': p.id, 'name': p.full_name} for p in patients])
 
-# --- ROTA DE RELATÓRIOS (COM CORREÇÃO) ---
+# --- ROTA DE RELATÓRIOS ---
 @app.route('/reports')
 @login_required
 def reports():
     hoje = date.today()
     start_of_month = hoje.replace(day=1)
     
-    # 1. Dados de status de atendimentos
     appointments_this_month = Appointment.query.filter(Appointment.user_id == current_user.id, Appointment.start_time >= start_of_month).all()
     status_counts = {'Concluído': 0, 'Agendado': 0, 'Cancelado': 0}
     for appt in appointments_this_month:
         if appt.status in status_counts: status_counts[appt.status] += 1
     
-    # 2. Dados de novos pacientes
     new_patients_data = {}
     for i in range(6):
         target_date = hoje.replace(day=1) - timedelta(days=i * 30)
         month_key = target_date.strftime("%b/%Y")
         
-        # AQUI ESTÁ A CORREÇÃO: Usamos to_char para PostgreSQL
         count = db.session.query(func.count(Patient.id)).filter(
             Patient.user_id == current_user.id,
             func.to_char(Patient.created_at, 'YYYY-MM') == target_date.strftime('%Y-%m')
         ).scalar()
         new_patients_data[month_key] = count
     
-    # 3. Dados financeiros
     total_recebido_query = db.session.query(func.sum(Appointment.price)).filter(Appointment.user_id == current_user.id, Appointment.payment_status == 'Pago', Appointment.start_time >= start_of_month).scalar()
     total_recebido = total_recebido_query or 0.0
     total_pendente_query = db.session.query(func.sum(Appointment.price)).filter(Appointment.user_id == current_user.id, Appointment.payment_status == 'Pendente', Appointment.start_time >= start_of_month).scalar()

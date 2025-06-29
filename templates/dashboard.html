@@ -1,57 +1,71 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="container">
-    <h1 class="mb-4">Dashboard</h1>
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1>Dashboard</h1>
+    <span class="text-muted">Hoje: {{ today.strftime('%d/%m/%Y') }}</span>
+</div>
 
-    <div class="row mb-4">
-        <div class="col-md-6">
-            <div class="card text-center">
-                <div class="card-body">
-                    <h5 class="card-title">Total de Pacientes</h5>
-                    <p class="card-text fs-1">{{ total_patients }}</p>
-                    <a href="{{ url_for('list_patients') }}" class="btn btn-primary">Ver Pacientes</a>
-                </div>
+<div class="row">
+    <div class="col-md-8">
+        <div class="card mb-4">
+            <div class="card-header">
+                <i class="bi bi-calendar-check me-2"></i>Próximos 5 Agendamentos
+            </div>
+            <div class="list-group list-group-flush">
+                {% if proximos_agendamentos %}
+                    {% for appt in proximos_agendamentos %}
+                    <a href="{{ url_for('patient_detail', patient_id=appt.patient_id) }}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>{{ appt.patient.full_name }}</strong><br>
+                            <small class="text-muted">{{ appt.start_time.strftime('%A, %d de %b às %H:%M') }}</small>
+                        </div>
+                        <span class="badge bg-info rounded-pill">{{ appt.status }}</span>
+                    </a>
+                    {% endfor %}
+                {% else %}
+                    <li class="list-group-item">Nenhum agendamento futuro encontrado.</li>
+                {% endif %}
             </div>
         </div>
-        <div class="col-md-6">
-            <div class="card text-center">
-                <div class="card-body">
-                    <h5 class="card-title">Agendamentos no Mês</h5>
-                    <p class="card-text fs-1">{{ total_appointments_month }}</p>
-                    <a href="{{ url_for('agenda') }}" class="btn btn-secondary">Ver Agenda Completa</a>
-                </div>
+
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-person-plus me-2"></i>Últimos Pacientes Adicionados
+            </div>
+            <div class="list-group list-group-flush">
+                {% if ultimos_pacientes %}
+                    {% for patient in ultimos_pacientes %}
+                        <a href="{{ url_for('patient_detail', patient_id=patient.id) }}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                            {{ patient.full_name }}
+                            <small class="text-muted">Cadastrado em {{ patient.created_at.strftime('%d/%m/%Y') }}</small>
+                        </a>
+                    {% endfor %}
+                {% else %}
+                    <li class="list-group-item">Nenhum paciente cadastrado.</li>
+                {% endif %}
             </div>
         </div>
     </div>
 
-    <h3 class="mt-5">Agendamentos de Hoje ({{ today.strftime('%d/%m/%Y') }})</h3>
-    <div class="list-group">
-        {% if appointments_today %}
-            {% for appt in appointments_today %}
-                <a href="#" class="list-group-item list-group-item-action">
-                    <div class="d-flex w-100 justify-content-between">
-                        <h5 class="mb-1">{{ appt.patient.full_name }}</h5>
-                        <small>{{ appt.start_time.strftime('%H:%M') }}</sall>
-                    </div>
-                    <p class="mb-1">Local: {{ appt.location }}</p>
-                    <span class="badge 
-                        {% if appt.status == 'Concluído' %} bg-success
-                        {% elif appt.status == 'Cancelado' %} bg-danger
-                        {% else %} bg-info
-                        {% endif %}">
-                        {{ appt.status }}
-                    </span>
-                </a>
-            {% endfor %}
-        {% else %}
-            <div class="alert alert-info" role="alert">
-                Nenhum agendamento para hoje.
+    <div class="col-md-4">
+        <div class="card text-white bg-primary">
+            <div class="card-header">
+                <i class="bi bi-cake2 me-2"></i>Aniversariantes do Mês
             </div>
-        {% endif %}
-    </div>
-    <div class="text-center mt-3">
-        <a href="{{ url_for('schedule_appointment') }}" class="btn btn-success">Novo Agendamento</a>
+            <div class="list-group list-group-flush">
+                {% if aniversariantes_do_mes %}
+                    {% for patient in aniversariantes_do_mes %}
+                        <a href="{{ url_for('patient_detail', patient_id=patient.id) }}" class="list-group-item list-group-item-action list-group-item-primary d-flex justify-content-between align-items-center">
+                            {{ patient.full_name }}
+                            <span class="badge bg-light text-primary rounded-pill">{{ patient.date_of_birth.strftime('%d/%m') }}</span>
+                        </a>
+                    {% endfor %}
+                {% else %}
+                    <li class="list-group-item list-group-item-primary">Nenhum aniversariante este mês.</li>
+                {% endif %}
+            </div>
+        </div>
     </div>
 </div>
 {% endblock %}
