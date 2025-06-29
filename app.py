@@ -94,20 +94,17 @@ def index():
 @app.route('/dashboard')
 @login_required
 def dashboard():
-    hoje = datetime.utcnow() # Usar datetime para comparações de tempo
+    hoje = datetime.utcnow()
     
-    # Widget 1: Próximos 5 agendamentos
     proximos_agendamentos = Appointment.query.filter(
         Appointment.user_id == current_user.id,
         Appointment.start_time >= hoje
     ).order_by(Appointment.start_time.asc()).limit(5).all()
 
-    # Widget 2: Últimos 5 pacientes adicionados
     ultimos_pacientes = Patient.query.filter_by(
         user_id=current_user.id
     ).order_by(Patient.created_at.desc()).limit(5).all()
 
-    # Widget 3: Aniversariantes do mês
     aniversariantes_do_mes = Patient.query.filter(
         Patient.user_id == current_user.id,
         extract('month', Patient.date_of_birth) == hoje.month
@@ -120,7 +117,6 @@ def dashboard():
         aniversariantes_do_mes=aniversariantes_do_mes
     )
 
-
 @app.route('/agenda')
 @login_required
 def agenda():
@@ -130,13 +126,36 @@ def agenda():
 @app.route('/patients')
 @login_required
 def list_patients():
+    """Exibe um painel completo com todos os pacientes do profissional."""
     page = request.args.get('page', 1, type=int)
     search_query = request.args.get('q', '')
+
     patients_query = Patient.query.filter_by(user_id=current_user.id)
+
     if search_query:
         patients_query = patients_query.filter(Patient.full_name.ilike(f'%{search_query}%'))
-    patients = patients_query.order_by(Patient.full_name).paginate(page=page, per_page=10)
-    return render_template('list_patients.html', patients=patients, search_query=search_query)
+
+    patients_pagination = patients_query.order_by(Patient.full_name).paginate(page=page, per_page=10)
+    
+    patients_enriched = []
+    for patient in patients_pagination.items:
+        appointment_count = patient.appointments.count()
+        latest_record = patient.records.order_by(ElectronicRecord.record_date.desc()).first()
+        latest_diagnosis = latest_record.medical_diagnosis if (latest_record and latest_record.medical_diagnosis) else "N/A"
+
+        patients_enriched.append({
+            'data': patient,
+            'appointment_count': appointment_count,
+            'latest_diagnosis': latest_diagnosis
+        })
+
+    return render_template(
+        'list_patients.html',
+        patients_pagination=patients_pagination,
+        patients_enriched=patients_enriched,
+        search_query=search_query,
+        title="Painel de Pacientes"
+    )
 
 @app.route('/patient/add', methods=['GET', 'POST'])
 @login_required
@@ -320,11 +339,7 @@ def reports():
     for i in range(6):
         target_date = hoje.replace(day=1) - timedelta(days=i * 30)
         month_key = target_date.strftime("%b/%Y")
-        
-        count = db.session.query(func.count(Patient.id)).filter(
-            Patient.user_id == current_user.id,
-            func.to_char(Patient.created_at, 'YYYY-MM') == target_date.strftime('%Y-%m')
-        ).scalar()
+        count = db.session.query(func.count(Patient.id)).filter(Patient.user_id == current_user.id, func.to_char(Patient.created_at, 'YYYY-MM') == target_date.strftime('%Y-%m')).scalar()
         new_patients_data[month_key] = count
     
     total_recebido_query = db.session.query(func.sum(Appointment.price)).filter(Appointment.user_id == current_user.id, Appointment.payment_status == 'Pago', Appointment.start_time >= start_of_month).scalar()

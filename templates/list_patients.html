@@ -2,11 +2,13 @@
 
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
-    <h1>Meus Pacientes</h1>
-    <a href="{{ url_for('add_patient') }}" class="btn btn-success">Adicionar Paciente</a>
+    <h1>{{ title or 'Painel de Pacientes' }}</h1>
+    <a href="{{ url_for('add_patient') }}" class="btn btn-success">
+        <i class="bi bi-person-plus-fill"></i> Adicionar Paciente
+    </a>
 </div>
 
-<div class="card mb-4">
+<div class="card mb-4 shadow-sm">
     <div class="card-body">
         <form method="GET" action="{{ url_for('list_patients') }}" class="d-flex">
             <input class="form-control me-2" type="search" name="q" placeholder="Pesquisar por nome..." aria-label="Pesquisar" value="{{ search_query or '' }}">
@@ -19,33 +21,37 @@
     <h4 class="mb-3">Resultados para: <span class="text-primary">{{ search_query }}</span></h4>
 {% endif %}
 
-<div class="card">
+<div class="card shadow-sm">
     <div class="card-body">
-        {% if patients.items %}
+        {% if patients_enriched %}
         <div class="table-responsive">
             <table class="table table-hover align-middle">
                 <thead>
                     <tr>
-                        <th scope="col">Nome Completo</th>
-                        <th scope="col">Especialidade</th>
+                        <th scope="col">Paciente</th>
+                        <th scope="col">Gênero</th>
                         <th scope="col">Idade</th>
-                        <th scope="col">Telefone</th>
+                        <th scope="col">Diagnóstico Médico</th>
+                        <th scope="col">Especialidade</th>
+                        <th scope="col" class="text-center">Nº de Atend.</th>
                         <th scope="col" class="text-center">Ações</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {% for patient in patients.items %}
+                    {% for p_info in patients_enriched %}
                     <tr>
-                        <td>{{ patient.full_name }}</td>
-                        <td><span class="badge bg-secondary fw-normal">{{ patient.specialty or 'N/A' }}</span></td>
-                        <td>{{ patient.age }} anos</td>
-                        <td>{{ patient.phone }}</td>
+                        <td><strong>{{ p_info.data.full_name }}</strong></td>
+                        <td>{{ p_info.data.gender or 'N/A' }}</td>
+                        <td>{{ p_info.data.age }}</td>
+                        <td>{{ p_info.latest_diagnosis }}</td>
+                        <td><span class="badge bg-secondary fw-normal">{{ p_info.data.specialty or 'N/A' }}</span></td>
+                        <td class="text-center">{{ p_info.appointment_count }}</td>
                         <td class="text-center">
-                            <a href="{{ url_for('patient_detail', patient_id=patient.id) }}" class="btn btn-info btn-sm" title="Ver Detalhes e Prontuário">
-                                <i class="bi bi-eye"></i> Detalhes
+                            <a href="{{ url_for('patient_detail', patient_id=p_info.data.id) }}" class="btn btn-info btn-sm" title="Ver Detalhes e Prontuário">
+                                <i class="bi bi-eye"></i>
                             </a>
-                            <a href="{{ url_for('edit_patient', patient_id=patient.id) }}" class="btn btn-secondary btn-sm" title="Editar Dados do Paciente">
-                                <i class="bi bi-pencil"></i> Editar
+                            <a href="{{ url_for('edit_patient', patient_id=p_info.data.id) }}" class="btn btn-secondary btn-sm" title="Editar Dados do Paciente">
+                                <i class="bi bi-pencil"></i>
                             </a>
                         </td>
                     </tr>
@@ -54,22 +60,22 @@
             </table>
         </div>
         {% else %}
-        <div class="alert alert-warning">Nenhum paciente encontrado com os critérios de pesquisa.</div>
+        <div class="alert alert-warning">Nenhum paciente encontrado.</div>
         {% endif %}
     </div>
 </div>
 
 <nav aria-label="Navegação de pacientes" class="mt-4">
     <ul class="pagination justify-content-center">
-        {% if patients.has_prev %}
-            <li class="page-item"><a class="page-link" href="{{ url_for('list_patients', page=patients.prev_num, q=search_query) }}">Anterior</a></li>
+        {% if patients_pagination.has_prev %}
+            <li class="page-item"><a class="page-link" href="{{ url_for('list_patients', page=patients_pagination.prev_num, q=search_query) }}">Anterior</a></li>
         {% else %}
             <li class="page-item disabled"><a class="page-link" href="#">Anterior</a></li>
         {% endif %}
 
-        {% for page_num in patients.iter_pages() %}
+        {% for page_num in patients_pagination.iter_pages() %}
             {% if page_num %}
-                <li class="page-item {% if page_num == patients.page %}active{% endif %}">
+                <li class="page-item {% if page_num == patients_pagination.page %}active{% endif %}">
                     <a class="page-link" href="{{ url_for('list_patients', page=page_num, q=search_query) }}">{{ page_num }}</a>
                 </li>
             {% else %}
@@ -77,8 +83,8 @@
             {% endif %}
         {% endfor %}
 
-        {% if patients.has_next %}
-            <li class="page-item"><a class="page-link" href="{{ url_for('list_patients', page=patients.next_num, q=search_query) }}">Próxima</a></li>
+        {% if patients_pagination.has_next %}
+            <li class="page-item"><a class="page-link" href="{{ url_for('list_patients', page=patients_pagination.next_num, q=search_query) }}">Próxima</a></li>
         {% else %}
             <li class="page-item disabled"><a class="page-link" href="#">Próxima</a></li>
         {% endif %}
