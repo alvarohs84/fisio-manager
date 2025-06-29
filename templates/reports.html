@@ -17,7 +17,7 @@
 </div>
 
 <div class="row">
-    <div class="col-md-6 mb-4">
+    <div class="col-md-12 mb-4">
         <div class="card">
             <div class="card-body">
                 <h5 class="card-title">Status dos Atendimentos (Mês Atual)</h5>
@@ -25,16 +25,63 @@
             </div>
         </div>
     </div>
-    <div class="col-md-6 mb-4">
-        <div class="card">
-            <div class="card-body">
-                <h5 class="card-title">Novos Pacientes por Mês</h5>
-                <canvas id="newPatientsChart"></canvas>
-            </div>
+</div>
+
+<div class="card shadow-sm mt-4">
+    <div class="card-header">
+        <h4 class="mb-0">Atendimentos por Paciente/Mês (Últimos 12 Meses)</h4>
+    </div>
+    <div class="card-body">
+        {% if patient_monthly_data %}
+        <div class="table-responsive">
+            <table class="table table-bordered table-striped table-hover">
+                <thead class="table-light">
+                    <tr>
+                        <th class="sticky-left">Paciente</th>
+                        {% for month in sorted_months %}
+                            <th class="text-center">{{ month }}</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for patient_name, monthly_counts in patient_monthly_data.items()|sort %}
+                    <tr>
+                        <td class="sticky-left"><strong>{{ patient_name }}</strong></td>
+                        {% for month in sorted_months %}
+                            <td class="text-center">
+                                {{ monthly_counts.get(month, 0) }}
+                            </td>
+                        {% endfor %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
         </div>
+        {% else %}
+            <div class="alert alert-info">Não há dados de atendimentos para exibir neste relatório.</div>
+        {% endif %}
     </div>
 </div>
 {% endblock %}
+
+{% block styles %}
+{{ super() }}
+<style>
+    .table-responsive {
+        max-height: 600px;
+    }
+    .sticky-left {
+        position: sticky;
+        left: 0;
+        background-color: #fff;
+        z-index: 1;
+    }
+    thead .sticky-left {
+        z-index: 2;
+    }
+</style>
+{% endblock %}
+
 
 {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -42,7 +89,7 @@
     // Gráfico de Status dos Atendimentos
     const statusCtx = document.getElementById('statusChart');
     new Chart(statusCtx, {
-        type: 'pie',
+        type: 'doughnut', // Alterado para doughnut para variar
         data: {
             labels: ['Concluído', 'Agendado', 'Cancelado'],
             datasets: [{
@@ -52,27 +99,17 @@
                     {{ status_counts.get('Agendado', 0) }},
                     {{ status_counts.get('Cancelado', 0) }}
                 ],
-                backgroundColor: ['#28a745', '#0dcaf0', '#dc3545']
-            }]
-        }
-    });
-
-    // Gráfico de Novos Pacientes
-    const newPatientsCtx = document.getElementById('newPatientsChart');
-    const newPatientsData = {{ new_patients_data | tojson }};
-    new Chart(newPatientsCtx, {
-        type: 'bar',
-        data: {
-            labels: Object.keys(newPatientsData).reverse(),
-            datasets: [{
-                label: 'Novos Pacientes',
-                data: Object.values(newPatientsData).reverse(),
-                backgroundColor: 'rgba(0, 123, 255, 0.5)',
-                borderColor: 'rgba(0, 123, 255, 1)',
-                borderWidth: 1
+                backgroundColor: ['#198754', '#0dcaf0', '#dc3545']
             }]
         },
-        options: { scales: { y: { beginAtZero: true } } }
+        options: {
+            responsive: true,
+            plugins: {
+                legend: {
+                    position: 'top',
+                }
+            }
+        }
     });
 </script>
 {% endblock %}

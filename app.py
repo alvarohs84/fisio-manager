@@ -12,6 +12,7 @@ import cloudinary
 import cloudinary.uploader
 import cloudinary.api
 from sqlalchemy import func, extract
+from collections import defaultdict
 
 # --- CONFIGURAÇÃO DA APLICAÇÃO ---
 app = Flask(__name__)
@@ -33,12 +34,7 @@ login_manager.login_message = 'Por favor, faça o login para acessar esta págin
 login_manager.login_message_category = 'info'
 
 # --- CONFIGURAÇÃO DO CLOUDINARY ---
-cloudinary.config(
-    cloud_name = os.environ.get('CLOUDINARY_CLOUD_NAME'),
-    api_key = os.environ.get('CLOUDINARY_API_KEY'),
-    api_secret = os.environ.get('CLOUDINARY_API_SECRET'),
-    secure = True
-)
+cloudinary.config(cloud_name=os.environ.get('CLOUDINARY_CLOUD_NAME'), api_key=os.environ.get('CLOUDINARY_API_KEY'), api_secret=os.environ.get('CLOUDINARY_API_SECRET'), secure=True)
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -46,10 +42,7 @@ def load_user(user_id):
 
 @app.context_processor
 def inject_global_variables():
-    return {
-        'current_year': datetime.utcnow().year,
-        'today': date.today()
-    }
+    return {'current_year': datetime.utcnow().year, 'today': date.today()}
 
 # --- ROTAS DE AUTENTICAÇÃO ---
 @app.route('/register', methods=['GET', 'POST'])
@@ -95,23 +88,10 @@ def index():
 @login_required
 def dashboard():
     hoje = datetime.utcnow()
-    proximos_agendamentos = Appointment.query.filter(
-        Appointment.user_id == current_user.id,
-        Appointment.start_time >= hoje
-    ).order_by(Appointment.start_time.asc()).limit(5).all()
-    ultimos_pacientes = Patient.query.filter_by(
-        user_id=current_user.id
-    ).order_by(Patient.created_at.desc()).limit(5).all()
-    aniversariantes_do_mes = Patient.query.filter(
-        Patient.user_id == current_user.id,
-        extract('month', Patient.date_of_birth) == hoje.month
-    ).order_by(extract('day', Patient.date_of_birth).asc()).all()
-    return render_template(
-        'dashboard.html',
-        proximos_agendamentos=proximos_agendamentos,
-        ultimos_pacientes=ultimos_pacientes,
-        aniversariantes_do_mes=aniversariantes_do_mes
-    )
+    proximos_agendamentos = Appointment.query.filter(Appointment.user_id == current_user.id, Appointment.start_time >= hoje).order_by(Appointment.start_time.asc()).limit(5).all()
+    ultimos_pacientes = Patient.query.filter_by(user_id=current_user.id).order_by(Patient.created_at.desc()).limit(5).all()
+    aniversariantes_do_mes = Patient.query.filter(Patient.user_id == current_user.id, extract('month', Patient.date_of_birth) == hoje.month).order_by(extract('day', Patient.date_of_birth).asc()).all()
+    return render_template('dashboard.html', proximos_agendamentos=proximos_agendamentos, ultimos_pacientes=ultimos_pacientes, aniversariantes_do_mes=aniversariantes_do_mes)
 
 @app.route('/agenda')
 @login_required
@@ -134,14 +114,9 @@ def list_patients():
         latest_record = patient.records.order_by(ElectronicRecord.record_date.desc()).first()
         latest_diagnosis = latest_record.medical_diagnosis if (latest_record and latest_record.medical_diagnosis) else "N/A"
         patients_enriched.append({'data': patient, 'appointment_count': appointment_count, 'latest_diagnosis': latest_diagnosis})
-    return render_template(
-        'list_patients.html',
-        patients_pagination=patients_pagination,
-        patients_enriched=patients_enriched,
-        search_query=search_query,
-        title="Painel de Pacientes"
-    )
+    return render_template('list_patients.html', patients_pagination=patients_pagination, patients_enriched=patients_enriched, search_query=search_query, title="Painel de Pacientes")
 
+# ... (outras rotas de paciente, sem alterações) ...
 @app.route('/patient/add', methods=['GET', 'POST'])
 @login_required
 def add_patient():
@@ -194,7 +169,6 @@ def patient_detail(patient_id):
     assessments = patient.assessments.order_by(Assessment.created_at.desc()).all()
     return render_template('patient_detail.html', patient=patient, records=records, assessments=assessments)
 
-# --- ROTAS DE PRONTUÁRIO E AVALIAÇÃO ---
 @app.route('/patient/<int:patient_id>/add_record', methods=['GET', 'POST'])
 @login_required
 def add_record(patient_id):
@@ -241,7 +215,9 @@ def view_assessment(assessment_id):
         return redirect(url_for('list_patients'))
     return render_template('view_assessment.html', title='Detalhes da Avaliação', assessment=assessment)
 
-# --- ROTAS DE API PARA AGENDAMENTOS ---
+
+# --- APIS E ROTAS DE AGENDAMENTO ---
+# ... (sem alterações aqui, exceto a rota reports no final)
 @app.route('/api/appointment/create_from_agenda', methods=['POST'])
 @login_required
 def create_from_agenda():
@@ -255,11 +231,9 @@ def create_from_agenda():
         is_recurring = data.get('is_recurring', False)
         start_datetime = datetime.fromisoformat(start_datetime_str.replace('Z', '+00:00'))
         price_float = float(session_price) if session_price else None
-        
         def create_single_appointment(appt_time, rec_id=None):
             new_appt = Appointment(start_time=appt_time, location=location, notes=notes, session_price=price_float, amount_paid=0.0, is_recurring=is_recurring, recurrence_id=rec_id, professional=current_user, patient_id=patient_id)
             db.session.add(new_appt)
-
         if not is_recurring:
             create_single_appointment(start_datetime)
         else:
@@ -329,32 +303,54 @@ def api_patients():
     patients = Patient.query.filter_by(user_id=current_user.id).order_by(Patient.full_name).all()
     return jsonify([{'id': p.id, 'name': p.full_name} for p in patients])
 
-# --- ROTA DE RELATÓRIOS ---
+# --- ROTA DE RELATÓRIOS (COM O NOVO PAINEL) ---
 @app.route('/reports')
 @login_required
 def reports():
     hoje = date.today()
     start_of_month = hoje.replace(day=1)
     
+    # 1. Dados de status de atendimentos (sem alteração)
     appointments_this_month = Appointment.query.filter(Appointment.user_id == current_user.id, Appointment.start_time >= start_of_month).all()
     status_counts = {'Concluído': 0, 'Agendado': 0, 'Cancelado': 0}
     for appt in appointments_this_month:
         if appt.status in status_counts: status_counts[appt.status] += 1
     
-    new_patients_data = {}
-    for i in range(6):
-        target_date = hoje.replace(day=1) - timedelta(days=i * 30)
-        month_key = target_date.strftime("%b/%Y")
-        count = db.session.query(func.count(Patient.id)).filter(Patient.user_id == current_user.id, func.to_char(Patient.created_at, 'YYYY-MM') == target_date.strftime('%Y-%m')).scalar()
-        new_patients_data[month_key] = count
-    
+    # 2. Dados financeiros (sem alteração)
     total_recebido_mes = db.session.query(func.sum(Appointment.amount_paid)).filter(Appointment.user_id == current_user.id, Appointment.start_time >= start_of_month).scalar() or 0.0
+
+    # 3. NOVOS DADOS: Contagem de atendimentos por paciente/mês
+    # Esta consulta agrupa os dados por nome do paciente e pelo mês do agendamento
+    results = db.session.query(
+        Patient.full_name,
+        func.to_char(Appointment.start_time, 'YYYY-MM').label('month'),
+        func.count(Appointment.id).label('session_count')
+    ).join(Appointment).filter(
+        Appointment.user_id == current_user.id,
+        # Filtro opcional: apenas dos últimos 12 meses para não sobrecarregar
+        Appointment.start_time >= (hoje - timedelta(days=365))
+    ).group_by(
+        Patient.full_name, 'month'
+    ).order_by(
+        Patient.full_name, 'month'
+    ).all()
+
+    # Transforma os resultados para um formato fácil de usar no template
+    patient_monthly_data = defaultdict(dict)
+    all_months = set()
+    for name, month, count in results:
+        patient_monthly_data[name][month] = count
+        all_months.add(month)
+    
+    # Ordena os meses para exibição correta nas colunas da tabela
+    sorted_months = sorted(list(all_months))
 
     return render_template(
         'reports.html', 
         status_counts=status_counts, 
-        new_patients_data=new_patients_data,
-        total_recebido_mes=total_recebido_mes
+        total_recebido_mes=total_recebido_mes,
+        patient_monthly_data=patient_monthly_data,
+        sorted_months=sorted_months
     )
 
 # --- COMANDO PARA INICIALIZAR O BANCO DE DADOS ---
