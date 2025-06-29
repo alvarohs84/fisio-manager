@@ -136,6 +136,7 @@ def add_patient():
         new_patient = Patient(
             full_name=form.full_name.data,
             date_of_birth=form.date_of_birth.data,
+            gender=form.gender.data,
             phone=form.phone.data,
             specialty=form.specialty.data,
             professional=current_user

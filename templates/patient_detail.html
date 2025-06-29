@@ -7,6 +7,7 @@
     </div>
     <div class="card-body">
         <p><strong>Data de Nascimento:</strong> {{ patient.date_of_birth.strftime('%d/%m/%Y') }} ({{ patient.age }} anos)</p>
+        <p><strong>Gênero:</strong> {{ patient.gender or 'Não especificado' }}</p>
         <p><strong>Telefone:</strong> {{ patient.phone }}</p>
         <p><strong>Especialidade Principal:</strong> {{ patient.specialty or 'Não especificada' }}</p>
     </div>

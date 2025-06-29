@@ -1,7 +1,7 @@
 # forms.py
 
 from flask_wtf import FlaskForm
-from wtforms import StringField, PasswordField, SubmitField, BooleanField, DateField, TimeField, SelectField, IntegerField, TextAreaField, MultipleFileField
+from wtforms import StringField, PasswordField, SubmitField, BooleanField, DateField, TimeField, SelectField, IntegerField, TextAreaField, MultipleFileField, RadioField
 from wtforms.validators import DataRequired, Email, EqualTo, ValidationError, Optional
 from models import User
 
@@ -26,6 +26,7 @@ class RegistrationForm(FlaskForm):
 class PatientForm(FlaskForm):
     full_name = StringField('Nome Completo', validators=[DataRequired()])
     date_of_birth = DateField('Data de Nascimento', format='%Y-%m-%d', validators=[DataRequired()])
+    gender = RadioField('Gênero', choices=[('Feminino','Feminino'), ('Masculino','Masculino')], validators=[Optional()])
     phone = StringField('Telefone', validators=[DataRequired()])
     
     specialty = SelectField('Especialidade Principal',

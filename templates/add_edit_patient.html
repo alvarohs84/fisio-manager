@@ -22,6 +22,17 @@
                             <span class="text-danger">{{ error }}</span>
                         {% endfor %}
                     </div>
+                    
+                    <div class="mb-3">
+                        {{ form.gender.label(class="form-label d-block") }}
+                        {% for subfield in form.gender %}
+                            <div class="form-check form-check-inline">
+                                {{ subfield(class="form-check-input") }}
+                                {{ subfield.label(class="form-check-label") }}
+                            </div>
+                        {% endfor %}
+                    </div>
+
                     <div class="mb-3">
                         {{ form.phone.label(class="form-label") }}
                         {{ form.phone(class="form-control") }}

@@ -31,10 +31,11 @@ class Patient(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     full_name = db.Column(db.String(150), nullable=False, index=True)
     date_of_birth = db.Column(db.Date, nullable=False)
+    gender = db.Column(db.String(20), nullable=True) # Gênero (Masculino, Feminino, etc.)
     phone = db.Column(db.String(20))
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     
-    specialty = db.Column(db.String(100), nullable=True) # Especialidade principal do tratamento
+    specialty = db.Column(db.String(100), nullable=True)
 
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     
