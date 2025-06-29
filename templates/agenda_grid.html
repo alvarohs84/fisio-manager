@@ -11,14 +11,9 @@
     .loading-spinner { display: none; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 10; }
     .modal-body.loading .loading-spinner { display: block; }
     .modal-body.loading .modal-form-content { opacity: 0.5; pointer-events: none; }
-    .fc-event.cancelled-event {
-        background-color: #f8f9fa !important;
-        border-color: #d3d3d3 !important;
-    }
-    .fc-event.cancelled-event .fc-event-title {
-        text-decoration: line-through;
-        color: #6c757d !important;
-    }
+    .fc-event.cancelled-event { background-color: #f8f9fa !important; border-color: #d3d3d3 !important; }
+    .fc-event.cancelled-event .fc-event-title { text-decoration: line-through; color: #6c757d !important; }
+    .fc-event.completed-event .fc-event-title { font-weight: bold; } /* Opcional: Estilo para concluído */
 </style>
 {% endblock %}
 
@@ -96,12 +91,12 @@
       </div>
       <div class="modal-footer justify-content-between">
           <div>
-              <button type="button" class="btn btn-outline-secondary btn-sm" id="cancelAppointmentTriggerBtn" title="Marcar como Cancelado"><i class="bi bi-x-circle"></i> Cancelar</button>
-              <button type="button" class="btn btn-outline-danger btn-sm" id="deleteAppointmentTriggerBtn" title="Apagar Permanentemente"><i class="bi bi-trash"></i> Apagar</button>
+              <button type="button" class="btn btn-outline-danger btn-sm" id="deleteAppointmentTriggerBtn" title="Apagar Permanentemente"><i class="bi bi-trash"></i></button>
               <a href="#" id="viewGoToPatient" class="btn btn-outline-info btn-sm">Ver Prontuário</a>
           </div>
           <div>
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+            <button type="button" class="btn btn-outline-secondary" id="cancelAppointmentTriggerBtn">Cancelar Atendimento</button>
+            <button type="button" class="btn btn-outline-success" id="completeAppointmentBtn">Marcar como Concluído</button>
             <button type="button" class="btn btn-primary" id="saveFinancialsBtn">Salvar Alterações</button>
           </div>
       </div>
@@ -125,16 +120,13 @@
 <div class="modal fade" id="deleteConfirmationModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog">
     <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title text-danger"><i class="bi bi-exclamation-triangle-fill"></i> Confirmar Exclusão Permanente</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
+      <div class="modal-header"><h5 class="modal-title text-danger"><i class="bi bi-exclamation-triangle-fill"></i> Confirmar Exclusão Permanente</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
       <div class="modal-body">
         <p>Tem a certeza absoluta que deseja <strong>apagar</strong> este atendimento?</p>
-        <p class="text-danger"><strong>Atenção:</strong> Esta ação é irreversível e o registo será removido permanentemente da base de dados.</p>
+        <p class="text-danger"><strong>Atenção:</strong> Esta ação é irreversível e o registo será removido permanentemente.</p>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Não, manter registo</button>
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Não</button>
         <button type="button" class="btn btn-danger" id="confirmDeleteBtn">Sim, apagar permanentemente</button>
       </div>
     </div>
@@ -151,7 +143,7 @@ document.addEventListener('DOMContentLoaded', function() {
     var scheduleModal = new bootstrap.Modal(document.getElementById('scheduleModal'));
     var viewEventModal = new bootstrap.Modal(document.getElementById('viewEventModal'));
     var cancelConfirmationModal = new bootstrap.Modal(document.getElementById('cancelConfirmationModal'));
-    var deleteConfirmationModal = new bootstrap.Modal(document.getElementById('deleteConfirmationModal')); // Novo modal
+    var deleteConfirmationModal = new bootstrap.Modal(document.getElementById('deleteConfirmationModal'));
     let currentEventId = null;
 
     const formatCurrency = (value) => `R$ ${(value || 0).toFixed(2).replace('.', ',')}`;
@@ -163,7 +155,12 @@ document.addEventListener('DOMContentLoaded', function() {
         initialView: 'timeGridWeek',
         events: '/api/appointments',
         selectable: true,
-        eventClassNames: function(arg) { return arg.event.extendedProps.status === 'Cancelado' ? ['cancelled-event'] : []; },
+        eventClassNames: function(arg) {
+            const props = arg.event.extendedProps;
+            if (props.status === 'Cancelado') return ['cancelled-event'];
+            if (props.status === 'Concluído') return ['completed-event'];
+            return [];
+        },
         eventContent: function(arg) {
             let props = arg.event.extendedProps;
             let balance = (props.amount_paid || 0) - (props.session_price || 0);
@@ -178,7 +175,6 @@ document.addEventListener('DOMContentLoaded', function() {
             return { html: `<div class="fc-event-title">${arg.event.title}</div>${iconHtml}` };
         },
         dateClick: function(info) {
-            // ... (sem alterações) ...
             document.getElementById('scheduleForm').reset();
             document.getElementById('recurrenceOptions').style.display = 'none';
             document.getElementById('start_datetime').value = info.date.toISOString();
@@ -193,10 +189,9 @@ document.addEventListener('DOMContentLoaded', function() {
         eventClick: function(info) {
             currentEventId = info.event.id;
             let props = info.event.extendedProps;
-            let startDate = info.event.start;
             
             document.getElementById('viewPatientName').textContent = info.event.title;
-            document.getElementById('viewEventDate').textContent = startDate.toLocaleString('pt-BR', { dateStyle: 'full', timeStyle: 'short' });
+            document.getElementById('viewEventDate').textContent = info.event.start.toLocaleString('pt-BR', { dateStyle: 'full', timeStyle: 'short' });
             document.getElementById('viewEventLocation').textContent = props.location || 'N/A';
             document.getElementById('viewGoToPatient').href = `/patient/${props.patient_id}`;
             document.getElementById('viewEventPrice').value = props.session_price || '';
@@ -210,10 +205,11 @@ document.addEventListener('DOMContentLoaded', function() {
             else if (props.status === 'Concluído') statusBadge.classList.add('bg-success');
             else statusBadge.classList.add('bg-info');
 
-            const isCancelled = props.status === 'Cancelado';
-            document.getElementById('financialsFieldset').disabled = isCancelled;
-            document.getElementById('saveFinancialsBtn').disabled = isCancelled;
-            document.getElementById('cancelAppointmentTriggerBtn').disabled = isCancelled;
+            const isActionable = props.status === 'Agendado';
+            document.getElementById('financialsFieldset').disabled = !isActionable;
+            document.getElementById('saveFinancialsBtn').disabled = !isActionable;
+            document.getElementById('cancelAppointmentTriggerBtn').disabled = !isActionable;
+            document.getElementById('completeAppointmentBtn').disabled = !isActionable;
             
             fetchPatientBalance(props.patient_id);
             viewEventModal.show();
@@ -231,13 +227,11 @@ document.addEventListener('DOMContentLoaded', function() {
             balanceSpan.className = data.balance < 0 ? 'text-danger' : 'text-success';
         });
     }
-
     function sendApiRequest(url, data) {
         return fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
     }
 
     // --- EVENT LISTENERS DOS BOTÕES ---
-    // ... (botões de salvar, sem alterações) ...
     document.getElementById('isRecurringCheck').addEventListener('change', function() { document.getElementById('recurrenceOptions').style.display = this.checked ? 'block' : 'none'; });
     document.getElementById('saveAppointmentBtn').addEventListener('click', function() {
         let appointmentData = { patient_id: document.getElementById('patientSelect').value, start_datetime: document.getElementById('start_datetime').value, location: document.getElementById('locationInput').value, session_price: document.getElementById('priceInput').value, notes: document.getElementById('notesTextarea').value, is_recurring: document.getElementById('isRecurringCheck').checked, weekdays: Array.from(document.querySelectorAll('.weekday-check:checked')).map(cb => cb.value), weeks_to_repeat: document.getElementById('weeksRepeatInput').value };
@@ -249,9 +243,8 @@ document.addEventListener('DOMContentLoaded', function() {
         sendApiRequest(`/api/appointment/${currentEventId}/update_financials`, financialData).then(res => res.json()).then(data => { if (data.status === 'success') { viewEventModal.hide(); calendar.refetchEvents(); } else { alert(`Erro: ${data.message}`); } });
     });
 
-    // Botão para CANCELAR (abre modal)
+    // LÓGICA DE CANCELAR
     document.getElementById('cancelAppointmentTriggerBtn').addEventListener('click', function() { cancelConfirmationModal.show(); });
-    // Botão que CONFIRMA o cancelamento
     document.getElementById('confirmCancelBtn').addEventListener('click', function() {
         sendApiRequest(`/api/appointment/${currentEventId}/cancel`, {}).then(res => res.json()).then(data => {
             if (data.status === 'success') { cancelConfirmationModal.hide(); viewEventModal.hide(); calendar.refetchEvents(); } 
@@ -259,24 +252,26 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    // --- NOVA LÓGICA PARA APAGAR ---
-    // Botão para APAGAR (abre modal)
-    document.getElementById('deleteAppointmentTriggerBtn').addEventListener('click', function() {
-        deleteConfirmationModal.show();
-    });
-    // Botão que CONFIRMA o apagar
+    // LÓGICA DE APAGAR
+    document.getElementById('deleteAppointmentTriggerBtn').addEventListener('click', function() { deleteConfirmationModal.show(); });
     document.getElementById('confirmDeleteBtn').addEventListener('click', function() {
         sendApiRequest(`/api/appointment/${currentEventId}/delete`, {}).then(res => res.json()).then(data => {
-            if (data.status === 'success') {
-                deleteConfirmationModal.hide();
-                viewEventModal.hide();
-                calendar.refetchEvents();
-            } else {
-                alert(`Erro ao apagar: ${data.message}`);
-            }
+            if (data.status === 'success') { deleteConfirmationModal.hide(); viewEventModal.hide(); calendar.refetchEvents(); } 
+            else { alert(`Erro: ${data.message}`); }
         });
     });
 
+    // --- NOVA LÓGICA PARA CONCLUIR ---
+    document.getElementById('completeAppointmentBtn').addEventListener('click', function() {
+        sendApiRequest(`/api/appointment/${currentEventId}/complete`, {}).then(res => res.json()).then(data => {
+            if (data.status === 'success') {
+                viewEventModal.hide();
+                calendar.refetchEvents();
+            } else {
+                alert(`Erro ao concluir: ${data.message}`);
+            }
+        });
+    });
 });
 </script>
 {% endblock %}

@@ -281,23 +281,31 @@ def update_financials(appointment_id):
 @login_required
 def cancel_appointment(appointment_id):
     appointment = Appointment.query.get_or_404(appointment_id)
-    if appointment.user_id != current_user.id:
-        return jsonify({'status': 'error', 'message': 'Não autorizado'}), 403
+    if appointment.user_id != current_user.id: return jsonify({'status': 'error', 'message': 'Não autorizado'}), 403
     appointment.status = 'Cancelado'
     db.session.commit()
     return jsonify({'status': 'success', 'message': 'Agendamento cancelado com sucesso.'})
 
-# ROTA ADICIONADA: PARA APAGAR PERMANENTEMENTE UM AGENDAMENTO
 @app.route('/api/appointment/<int:appointment_id>/delete', methods=['POST'])
 @login_required
 def delete_appointment(appointment_id):
     appointment = Appointment.query.get_or_404(appointment_id)
-    if appointment.user_id != current_user.id:
-        return jsonify({'status': 'error', 'message': 'Não autorizado'}), 403
-    
+    if appointment.user_id != current_user.id: return jsonify({'status': 'error', 'message': 'Não autorizado'}), 403
     db.session.delete(appointment)
     db.session.commit()
     return jsonify({'status': 'success', 'message': 'Agendamento apagado permanentemente.'})
+
+# ROTA ADICIONADA: PARA CONCLUIR UM AGENDAMENTO
+@app.route('/api/appointment/<int:appointment_id>/complete', methods=['POST'])
+@login_required
+def complete_appointment(appointment_id):
+    appointment = Appointment.query.get_or_404(appointment_id)
+    if appointment.user_id != current_user.id:
+        return jsonify({'status': 'error', 'message': 'Não autorizado'}), 403
+    
+    appointment.status = 'Concluído'
+    db.session.commit()
+    return jsonify({'status': 'success', 'message': 'Agendamento marcado como concluído.'})
 
 
 @app.route('/api/patient/<int:patient_id>/financial_balance')
