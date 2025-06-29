@@ -147,6 +147,32 @@ def add_patient():
         return redirect(url_for('list_patients'))
     return render_template('add_edit_patient.html', form=form, title="Adicionar Paciente")
 
+@app.route('/patient/<int:patient_id>/edit', methods=['GET', 'POST'])
+@login_required
+def edit_patient(patient_id):
+    patient = Patient.query.get_or_404(patient_id)
+    # Garante que o usuário só pode editar seus próprios pacientes
+    if patient.user_id != current_user.id:
+        flash('Acesso não autorizado.', 'danger')
+        return redirect(url_for('list_patients'))
+    
+    from forms import PatientForm
+    form = PatientForm(obj=patient) # Pré-preenche o formulário com dados do paciente
+
+    if form.validate_on_submit():
+        # Atualiza os dados do objeto paciente com os dados do formulário
+        patient.full_name = form.full_name.data
+        patient.date_of_birth = form.date_of_birth.data
+        patient.gender = form.gender.data
+        patient.phone = form.phone.data
+        patient.specialty = form.specialty.data
+        db.session.commit()
+        flash('Dados do paciente atualizados com sucesso!', 'success')
+        return redirect(url_for('list_patients'))
+    
+    return render_template('add_edit_patient.html', form=form, title="Editar Paciente")
+
+
 @app.route('/patient/<int:patient_id>')
 @login_required
 def patient_detail(patient_id):
@@ -242,7 +268,7 @@ def view_assessment(assessment_id):
         return redirect(url_for('list_patients'))
     return render_template('view_assessment.html', title='Detalhes da Avaliação', assessment=assessment)
 
-# --- ROTAS PARA AGENDAMENTOS (ANTIGA E NOVAS APIS) ---
+# --- ROTAS PARA AGENDAMENTOS ---
 @app.route('/appointment/schedule', methods=['GET', 'POST'])
 @login_required
 def schedule_appointment():
@@ -314,11 +340,6 @@ def create_from_agenda():
             recurrence_id = str(uuid.uuid4())
             
             start_date_of_series = start_datetime.date()
-            clicked_weekday = start_date_of_series.weekday()
-
-            # Se o dia clicado não está na lista de recorrência, não crie o primeiro evento
-            # Isso é uma decisão de design: a recorrência só começa nos dias selecionados
-            # a partir da data clicada.
             
             for i in range(weeks_to_repeat):
                 for weekday in weekdays:
@@ -329,7 +350,6 @@ def create_from_agenda():
                     
                     recurrent_start_time = datetime.combine(target_date, start_datetime.time())
                     
-                    # Cria apenas se a data for no futuro ou no mesmo dia do início da série
                     if recurrent_start_time.date() >= start_date_of_series:
                         appointment = Appointment(
                             start_time=recurrent_start_time,
