@@ -1,43 +1,44 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="container">
-    <h1 class="mb-4">Relatórios e Estatísticas</h1>
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1>Relatórios</h1>
+</div>
 
-    <div class="card mb-4">
-        <div class="card-header">
-            <h4>Status dos Agendamentos no Mês Atual</h4>
-        </div>
-        <div class="card-body">
-            <div class="row">
-                <div class="col-md-4 text-center">
-                    <div class="alert alert-success">
-                        <h2>{{ status_counts.get('Concluído', 0) }}</h2>
-                        <p class="mb-0">Concluídos</p>
-                    </div>
-                </div>
-                <div class="col-md-4 text-center">
-                    <div class="alert alert-info">
-                        <h2>{{ status_counts.get('Agendado', 0) }}</h2>
-                        <p class="mb-0">Agendados</p>
-                    </div>
-                </div>
-                <div class="col-md-4 text-center">
-                    <div class="alert alert-danger">
-                        <h2>{{ status_counts.get('Cancelado', 0) }}</h2>
-                        <p class="mb-0">Cancelados</p>
-                    </div>
-                </div>
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card text-white bg-success">
+            <div class="card-body">
+                <h5 class="card-title">Total Recebido este Mês</h5>
+                <p class="card-text fs-2">R$ {{ "%.2f"|format(total_recebido)|replace('.', ',') }}</p>
             </div>
         </div>
     </div>
-
-    <div class="card">
-        <div class="card-header">
-            <h4>Novos Pacientes nos Últimos 6 Meses</h4>
+    <div class="col-md-6">
+        <div class="card text-dark bg-warning">
+            <div class="card-body">
+                <h5 class="card-title">Total Pendente este Mês</h5>
+                <p class="card-text fs-2">R$ {{ "%.2f"|format(total_pendente)|replace('.', ',') }}</p>
+            </div>
         </div>
-        <div class="card-body">
-            <canvas id="newPatientsChart"></canvas>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-6 mb-4">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Status dos Atendimentos (Mês Atual)</h5>
+                <canvas id="statusChart"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6 mb-4">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Novos Pacientes por Mês</h5>
+                <canvas id="newPatientsChart"></canvas>
+            </div>
         </div>
     </div>
 </div>
@@ -45,49 +46,41 @@
 
 {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
 <script>
-    // Pega os dados que o Flask passou para o template
-    const newPatientsData = {{ new_patients_data | tojson }};
-
-    // Extrai os meses (labels) e as contagens (data)
-    const labels = Object.keys(newPatientsData).reverse();
-    const data = Object.values(newPatientsData).reverse();
-
-    const ctx = document.getElementById('newPatientsChart').getContext('2d');
-    const newPatientsChart = new Chart(ctx, {
-        type: 'bar', // Tipo do gráfico (barra)
+    // Gráfico de Status dos Atendimentos
+    const statusCtx = document.getElementById('statusChart');
+    new Chart(statusCtx, {
+        type: 'pie',
         data: {
-            labels: labels,
+            labels: ['Concluído', 'Agendado', 'Cancelado'],
             datasets: [{
-                label: 'Novos Pacientes por Mês',
-                data: data,
-                backgroundColor: 'rgba(54, 162, 235, 0.6)',
-                borderColor: 'rgba(54, 162, 235, 1)',
+                label: 'Atendimentos',
+                data: [
+                    {{ status_counts.get('Concluído', 0) }},
+                    {{ status_counts.get('Agendado', 0) }},
+                    {{ status_counts.get('Cancelado', 0) }}
+                ],
+                backgroundColor: ['#28a745', '#0dcaf0', '#dc3545']
+            }]
+        }
+    });
+
+    // Gráfico de Novos Pacientes
+    const newPatientsCtx = document.getElementById('newPatientsChart');
+    const newPatientsData = {{ new_patients_data | tojson }};
+    new Chart(newPatientsCtx, {
+        type: 'bar',
+        data: {
+            labels: Object.keys(newPatientsData).reverse(),
+            datasets: [{
+                label: 'Novos Pacientes',
+                data: Object.values(newPatientsData).reverse(),
+                backgroundColor: 'rgba(0, 123, 255, 0.5)',
+                borderColor: 'rgba(0, 123, 255, 1)',
                 borderWidth: 1
             }]
         },
-        options: {
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    ticks: {
-                        // Garante que o eixo Y só mostre números inteiros
-                        stepSize: 1
-                    }
-                }
-            },
-            responsive: true,
-            plugins: {
-                legend: {
-                    position: 'top',
-                },
-                title: {
-                    display: true,
-                    text: 'Evolução do Cadastro de Pacientes'
-                }
-            }
-        }
+        options: { scales: { y: { beginAtZero: true } } }
     });
 </script>
 {% endblock %}

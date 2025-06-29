@@ -2,21 +2,24 @@
 
 {% block styles %}
 <style>
-    .loading-spinner {
-        display: none;
-        position: absolute;
-        left: 50%;
-        top: 50%;
-        transform: translate(-50%, -50%);
-        z-index: 10;
+    /* Estilos para o ícone de pagamento no evento */
+    .fc-event-main-frame {
+        display: flex;
+        align-items: center;
     }
-    .modal-body.loading .loading-spinner {
-        display: block;
+    .payment-icon {
+        margin-left: 8px;
+        font-size: 0.9em;
+        padding: 2px 5px;
+        border-radius: 4px;
+        color: white;
     }
-    .modal-body.loading .modal-form-content {
-        opacity: 0.5;
-        pointer-events: none;
-    }
+    .payment-paid { background-color: #28a745; } /* Verde */
+    .payment-pending { background-color: #ffc107; } /* Amarelo */
+
+    .loading-spinner { display: none; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 10; }
+    .modal-body.loading .loading-spinner { display: block; }
+    .modal-body.loading .modal-form-content { opacity: 0.5; pointer-events: none; }
 </style>
 {% endblock %}
 
@@ -24,7 +27,6 @@
 <div class="card">
     <div class="card-header d-flex justify-content-between align-items-center">
         <h3>Agenda de Atendimentos</h3>
-        <a href="{{ url_for('schedule_appointment') }}" class="btn btn-sm btn-outline-primary">Formulário Completo</a>
     </div>
     <div class="card-body">
         <div id='calendar'></div>
@@ -34,84 +36,61 @@
 <div class="modal fade" id="scheduleModal" tabindex="-1" aria-labelledby="scheduleModalLabel" aria-hidden="true">
   <div class="modal-dialog">
     <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title" id="scheduleModalLabel">Novo Agendamento</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
+      <div class="modal-header"><h5 class="modal-title" id="scheduleModalLabel">Novo Agendamento</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
       <div class="modal-body">
-        <div class="loading-spinner">
-            <div class="spinner-border text-primary" role="status">
-                <span class="visually-hidden">Carregando...</span>
-            </div>
-        </div>
-
+        <div class="loading-spinner"><div class="spinner-border text-primary"></div></div>
         <div class="modal-form-content">
             <form id="scheduleForm">
                 <input type="hidden" id="start_datetime">
-                
-                <div class="mb-3">
-                    <label for="patientSelect" class="form-label">Paciente</label>
-                    <select class="form-select" id="patientSelect" required></select>
+                <div class="mb-3"><label for="patientSelect" class="form-label">Paciente</label><select class="form-select" id="patientSelect" required></select></div>
+                <div class="row">
+                    <div class="col-md-6 mb-3"><label for="locationInput" class="form-label">Local</label><input type="text" class="form-control" id="locationInput" value="Clínica"></div>
+                    <div class="col-md-6 mb-3"><label for="priceInput" class="form-label">Preço (R$)</label><input type="number" class="form-control" id="priceInput" placeholder="Ex: 150.00" step="0.01"></div>
                 </div>
-                
-                <div class="mb-3">
-                    <label for="locationInput" class="form-label">Local</label>
-                    <input type="text" class="form-control" id="locationInput" value="Clínica">
-                </div>
-                
-                <div class="form-check mb-3">
-                    <input class="form-check-input" type="checkbox" id="isRecurringCheck">
-                    <label class="form-check-label" for="isRecurringCheck">
-                        Repetir atendimento
-                    </label>
-                </div>
-                
+                <div class="form-check mb-3"><input class="form-check-input" type="checkbox" id="isRecurringCheck"><label class="form-check-label" for="isRecurringCheck">Repetir atendimento</label></div>
                 <div id="recurrenceOptions" class="border p-3 rounded mb-3" style="display: none;">
-                    <div class="mb-3">
-                        <label class="form-label">Repetir nos dias:</label>
-                        <div>
-                            <div class="form-check form-check-inline">
-                                <input class="form-check-input weekday-check" type="checkbox" value="1" id="checkMon">
-                                <label class="form-check-label" for="checkMon">Seg</label>
-                            </div>
-                            <div class="form-check form-check-inline">
-                                <input class="form-check-input weekday-check" type="checkbox" value="2" id="checkTue">
-                                <label class="form-check-label" for="checkTue">Ter</label>
-                            </div>
-                            <div class="form-check form-check-inline">
-                                <input class="form-check-input weekday-check" type="checkbox" value="3" id="checkWed">
-                                <label class="form-check-label" for="checkWed">Qua</label>
-                            </div>
-                            <div class="form-check form-check-inline">
-                                <input class="form-check-input weekday-check" type="checkbox" value="4" id="checkThu">
-                                <label class="form-check-label" for="checkThu">Qui</label>
-                            </div>
-                            <div class="form-check form-check-inline">
-                                <input class="form-check-input weekday-check" type="checkbox" value="5" id="checkFri">
-                                <label class="form-check-label" for="checkFri">Sex</label>
-                            </div>
-                             <div class="form-check form-check-inline">
-                                <input class="form-check-input weekday-check" type="checkbox" value="6" id="checkSat">
-                                <label class="form-check-label" for="checkSat">Sáb</label>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="mb-3">
-                        <label for="weeksRepeatInput" class="form-label">Por quantas semanas?</label>
-                        <input type="number" class="form-control" id="weeksRepeatInput" value="4" min="1">
-                    </div>
+                    <div class="mb-3"><label class="form-label">Repetir nos dias:</label><div>
+                        <div class="form-check form-check-inline"><input class="form-check-input weekday-check" type="checkbox" value="1" id="checkMon"><label class="form-check-label" for="checkMon">Seg</label></div>
+                        <div class="form-check form-check-inline"><input class="form-check-input weekday-check" type="checkbox" value="2" id="checkTue"><label class="form-check-label" for="checkTue">Ter</label></div>
+                        <div class="form-check form-check-inline"><input class="form-check-input weekday-check" type="checkbox" value="3" id="checkWed"><label class="form-check-label" for="checkWed">Qua</label></div>
+                        <div class="form-check form-check-inline"><input class="form-check-input weekday-check" type="checkbox" value="4" id="checkThu"><label class="form-check-label" for="checkThu">Qui</label></div>
+                        <div class="form-check form-check-inline"><input class="form-check-input weekday-check" type="checkbox" value="5" id="checkFri"><label class="form-check-label" for="checkFri">Sex</label></div>
+                        <div class="form-check form-check-inline"><input class="form-check-input weekday-check" type="checkbox" value="6" id="checkSat"><label class="form-check-label" for="checkSat">Sáb</label></div>
+                    </div></div>
+                    <div class="mb-3"><label for="weeksRepeatInput" class="form-label">Por quantas semanas?</label><input type="number" class="form-control" id="weeksRepeatInput" value="4" min="1"></div>
                 </div>
-
-                <div class="mb-3">
-                    <label for="notesTextarea" class="form-label">Anotações</label>
-                    <textarea class="form-control" id="notesTextarea" rows="3"></textarea>
-                </div>
+                <div class="mb-3"><label for="notesTextarea" class="form-label">Anotações</label><textarea class="form-control" id="notesTextarea" rows="2"></textarea></div>
             </form>
         </div>
       </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-        <button type="button" class="btn btn-primary" id="saveAppointmentBtn">Salvar Agendamento</button>
+      <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button><button type="button" class="btn btn-primary" id="saveAppointmentBtn">Salvar</button></div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="viewEventModal" tabindex="-1" aria-labelledby="viewEventModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header"><h5 class="modal-title" id="viewEventModalLabel">Detalhes do Agendamento</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body">
+          <h5 id="viewPatientName"></h5>
+          <p><i class="bi bi-calendar-event"></i> <span id="viewEventDate"></span></p>
+          <p><i class="bi bi-geo-alt"></i> <span id="viewEventLocation"></span></p>
+          <p><strong>Anotações:</strong> <span id="viewEventNotes" style="white-space: pre-wrap;"></span></p>
+          <hr>
+          <h6>Financeiro</h6>
+          <p><strong>Preço:</strong> R$ <span id="viewEventPrice"></span></p>
+          <div class="d-flex align-items-center">
+              <strong class="me-2">Status Pagamento:</strong>
+              <div class="btn-group" role="group">
+                  <button type="button" id="btnPaymentPending" class="btn btn-sm btn-outline-warning">Pendente</button>
+                  <button type="button" id="btnPaymentPaid" class="btn btn-sm btn-outline-success">Pago</button>
+              </div>
+          </div>
+      </div>
+      <div class="modal-footer justify-content-between">
+          <a href="#" id="viewGoToPatient" class="btn btn-outline-info btn-sm">Ver Prontuário do Paciente</a>
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
       </div>
     </div>
   </div>
@@ -121,113 +100,142 @@
 {% block scripts %}
 <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js'></script>
 <script>
-    document.addEventListener('DOMContentLoaded', function() {
-        var calendarEl = document.getElementById('calendar');
-        var scheduleModalEl = document.getElementById('scheduleModal');
-        // A inicialização do modal do Bootstrap não precisa do JQuery
-        var scheduleModal = new bootstrap.Modal(scheduleModalEl);
+document.addEventListener('DOMContentLoaded', function() {
+    var calendarEl = document.getElementById('calendar');
+    var scheduleModal = new bootstrap.Modal(document.getElementById('scheduleModal'));
+    var viewEventModal = new bootstrap.Modal(document.getElementById('viewEventModal'));
+    let currentClickedEventId = null;
 
-        var calendar = new FullCalendar.Calendar(calendarEl, {
-            locale: 'pt-br',
-            headerToolbar: {
-                left: 'prev,next today',
-                center: 'title',
-                right: 'dayGridMonth,timeGridWeek,timeGridDay'
-            },
-            initialView: 'timeGridWeek',
-            slotMinTime: '07:00:00',
-            slotMaxTime: '21:00:00',
-            events: '/api/appointments',
-            editable: true,
-            selectable: true,
-            
-            dateClick: function(info) {
-                // LINHA DE TESTE ADICIONADA:
-                console.log("O clique no calendário foi detetado! Informações do clique:", info);
+    var calendar = new FullCalendar.Calendar(calendarEl, {
+        locale: 'pt-br',
+        headerToolbar: { left: 'prev,next today', center: 'title', right: 'dayGridMonth,timeGridWeek,timeGridDay' },
+        initialView: 'timeGridWeek',
+        slotMinTime: '07:00:00',
+        slotMaxTime: '21:00:00',
+        events: '/api/appointments',
+        selectable: true,
 
-                document.getElementById('scheduleForm').reset();
-                document.getElementById('recurrenceOptions').style.display = 'none'; // Usando JS puro
-                
-                document.getElementById('start_datetime').value = info.date.toISOString();
-                
-                var formattedDate = info.date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
-                var formattedTime = info.date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-                document.getElementById('scheduleModalLabel').textContent = 'Novo Agendamento em ' + formattedDate + ' às ' + formattedTime;
-
-                var modalBody = document.querySelector('#scheduleModal .modal-body');
-                var patientSelect = document.getElementById('patientSelect');
-                
-                modalBody.classList.add('loading');
-                fetch('/api/patients')
-                    .then(response => response.json())
-                    .then(patients => {
-                        patientSelect.innerHTML = ''; // Limpa opções antigas
-                        patientSelect.appendChild(new Option('-- Selecione um Paciente --', ''));
-                        patients.forEach(p => {
-                            patientSelect.appendChild(new Option(p.name, p.id));
-                        });
-                        modalBody.classList.remove('loading');
-                    });
-
-                scheduleModal.show();
-            }
-        });
-
-        calendar.render();
-
-        document.getElementById('isRecurringCheck').addEventListener('change', function() {
-            var recurrenceOptions = document.getElementById('recurrenceOptions');
-            if (this.checked) {
-                recurrenceOptions.style.display = 'block';
-            } else {
-                recurrenceOptions.style.display = 'none';
-            }
-        });
-
-        document.getElementById('saveAppointmentBtn').addEventListener('click', function() {
-            var selectedWeekdays = [];
-            document.querySelectorAll('.weekday-check:checked').forEach(function(checkbox) {
-                selectedWeekdays.push(checkbox.value);
-            });
-
-            var appointmentData = {
-                patient_id: document.getElementById('patientSelect').value,
-                start_datetime: document.getElementById('start_datetime').value,
-                location: document.getElementById('locationInput').value,
-                notes: document.getElementById('notesTextarea').value,
-                is_recurring: document.getElementById('isRecurringCheck').checked,
-                weekdays: selectedWeekdays,
-                weeks_to_repeat: document.getElementById('weeksRepeatInput').value
-            };
-
-            if (!appointmentData.patient_id) {
-                alert('Por favor, selecione um paciente.');
-                return;
-            }
-            if (appointmentData.is_recurring && selectedWeekdays.length === 0) {
-                alert('Por favor, selecione pelo menos um dia da semana para a recorrência.');
-                return;
-            }
-
-            fetch('/api/appointment/create_from_agenda', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(appointmentData),
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.status === 'success') {
-                    scheduleModal.hide();
-                    calendar.refetchEvents();
+        // Renderiza o conteúdo customizado do evento
+        eventContent: function(arg) {
+            let props = arg.event.extendedProps;
+            let paymentIcon = '';
+            if (props.price > 0) {
+                if (props.payment_status === 'Pago') {
+                    paymentIcon = `<span class="payment-icon payment-paid" title="Pagamento Realizado"><i class="bi bi-check-circle-fill"></i></span>`;
                 } else {
-                    alert('Erro ao salvar: ' + data.message);
+                    paymentIcon = `<span class="payment-icon payment-pending" title="Pagamento Pendente"><i class="bi bi-hourglass-split"></i></span>`;
                 }
-            })
-            .catch((error) => {
-                console.error('Error:', error);
-                alert('Ocorreu um erro de comunicação com o servidor.');
-            });
-        });
+            }
+            return { html: `<div class="fc-event-title">${arg.event.title}</div>${paymentIcon}` };
+        },
+
+        // Clique num espaço vazio para CRIAR
+        dateClick: function(info) {
+            document.getElementById('scheduleForm').reset();
+            document.getElementById('recurrenceOptions').style.display = 'none';
+            document.getElementById('start_datetime').value = info.date.toISOString();
+            
+            let formattedDate = info.date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+            let formattedTime = info.date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+            document.getElementById('scheduleModalLabel').textContent = `Novo Agendamento em ${formattedDate} às ${formattedTime}`;
+
+            let modalBody = document.querySelector('#scheduleModal .modal-body');
+            modalBody.classList.add('loading');
+            fetch('/api/patients')
+                .then(response => response.json())
+                .then(patients => {
+                    let patientSelect = document.getElementById('patientSelect');
+                    patientSelect.innerHTML = '';
+                    patientSelect.appendChild(new Option('-- Selecione um Paciente --', ''));
+                    patients.forEach(p => patientSelect.appendChild(new Option(p.name, p.id)));
+                    modalBody.classList.remove('loading');
+                });
+            scheduleModal.show();
+        },
+
+        // Clique num evento existente para VER
+        eventClick: function(info) {
+            currentClickedEventId = info.event.id;
+            let props = info.event.extendedProps;
+            let startDate = info.event.start;
+            
+            document.getElementById('viewPatientName').textContent = info.event.title;
+            document.getElementById('viewEventDate').textContent = startDate.toLocaleString('pt-BR', { dateStyle: 'full', timeStyle: 'short' });
+            document.getElementById('viewEventLocation').textContent = props.location || 'N/A';
+            document.getElementById('viewEventNotes').textContent = props.notes || 'Nenhuma';
+            document.getElementById('viewEventPrice').textContent = props.price ? props.price.toFixed(2).replace('.', ',') : '0,00';
+            
+            // Link para o prontuário
+            document.getElementById('viewGoToPatient').href = `/patient/${props.patient_id}`;
+
+            // Atualiza botões de pagamento
+            updatePaymentButtons(props.payment_status);
+            
+            viewEventModal.show();
+        }
     });
+    calendar.render();
+
+    // Lógica do Modal de Criação
+    document.getElementById('isRecurringCheck').addEventListener('change', function() {
+        document.getElementById('recurrenceOptions').style.display = this.checked ? 'block' : 'none';
+    });
+
+    document.getElementById('saveAppointmentBtn').addEventListener('click', function() {
+        let selectedWeekdays = Array.from(document.querySelectorAll('.weekday-check:checked')).map(cb => cb.value);
+        let appointmentData = {
+            patient_id: document.getElementById('patientSelect').value,
+            start_datetime: document.getElementById('start_datetime').value,
+            location: document.getElementById('locationInput').value,
+            price: document.getElementById('priceInput').value,
+            notes: document.getElementById('notesTextarea').value,
+            is_recurring: document.getElementById('isRecurringCheck').checked,
+            weekdays: selectedWeekdays,
+            weeks_to_repeat: document.getElementById('weeksRepeatInput').value
+        };
+
+        if (!appointmentData.patient_id) return alert('Por favor, selecione um paciente.');
+        if (appointmentData.is_recurring && selectedWeekdays.length === 0) return alert('Selecione os dias da semana para a recorrência.');
+        
+        fetch('/api/appointment/create_from_agenda', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(appointmentData),
+        }).then(res => res.json()).then(data => {
+            if (data.status === 'success') {
+                scheduleModal.hide();
+                calendar.refetchEvents();
+            } else {
+                alert('Erro ao salvar: ' + data.message);
+            }
+        }).catch(err => alert('Erro de comunicação.'));
+    });
+
+    // Lógica do Modal de Visualização (Pagamento)
+    function updatePaymentButtons(status) {
+        let btnPending = document.getElementById('btnPaymentPending');
+        let btnPaid = document.getElementById('btnPaymentPaid');
+        btnPending.classList.toggle('active', status === 'Pendente');
+        btnPaid.classList.toggle('active', status === 'Pago');
+    }
+
+    function handlePaymentStatusChange(newStatus) {
+        fetch(`/api/appointment/${currentClickedEventId}/update_payment`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ payment_status: newStatus }),
+        }).then(res => res.json()).then(data => {
+            if (data.status === 'success') {
+                updatePaymentButtons(newStatus);
+                calendar.refetchEvents();
+            } else {
+                alert('Erro ao atualizar pagamento: ' + data.message);
+            }
+        }).catch(err => alert('Erro de comunicação.'));
+    }
+
+    document.getElementById('btnPaymentPending').addEventListener('click', () => handlePaymentStatusChange('Pendente'));
+    document.getElementById('btnPaymentPaid').addEventListener('click', () => handlePaymentStatusChange('Pago'));
+});
 </script>
 {% endblock %}
