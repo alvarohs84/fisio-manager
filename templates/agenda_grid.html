@@ -124,6 +124,7 @@
     document.addEventListener('DOMContentLoaded', function() {
         var calendarEl = document.getElementById('calendar');
         var scheduleModalEl = document.getElementById('scheduleModal');
+        // A inicialização do modal do Bootstrap não precisa do JQuery
         var scheduleModal = new bootstrap.Modal(scheduleModalEl);
 
         var calendar = new FullCalendar.Calendar(calendarEl, {
@@ -141,26 +142,31 @@
             selectable: true,
             
             dateClick: function(info) {
+                // LINHA DE TESTE ADICIONADA:
+                console.log("O clique no calendário foi detetado! Informações do clique:", info);
+
                 document.getElementById('scheduleForm').reset();
-                $('#recurrenceOptions').hide();
-                $('#start_datetime').val(info.date.toISOString());
+                document.getElementById('recurrenceOptions').style.display = 'none'; // Usando JS puro
+                
+                document.getElementById('start_datetime').value = info.date.toISOString();
                 
                 var formattedDate = info.date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
                 var formattedTime = info.date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-                $('#scheduleModalLabel').text('Novo Agendamento em ' + formattedDate + ' às ' + formattedTime);
+                document.getElementById('scheduleModalLabel').textContent = 'Novo Agendamento em ' + formattedDate + ' às ' + formattedTime;
 
-                var modalBody = $('.modal-body');
-                modalBody.addClass('loading');
+                var modalBody = document.querySelector('#scheduleModal .modal-body');
+                var patientSelect = document.getElementById('patientSelect');
+                
+                modalBody.classList.add('loading');
                 fetch('/api/patients')
                     .then(response => response.json())
                     .then(patients => {
-                        var patientSelect = $('#patientSelect');
-                        patientSelect.empty();
-                        patientSelect.append(new Option('-- Selecione um Paciente --', ''));
+                        patientSelect.innerHTML = ''; // Limpa opções antigas
+                        patientSelect.appendChild(new Option('-- Selecione um Paciente --', ''));
                         patients.forEach(p => {
-                            patientSelect.append(new Option(p.name, p.id));
+                            patientSelect.appendChild(new Option(p.name, p.id));
                         });
-                        modalBody.removeClass('loading');
+                        modalBody.classList.remove('loading');
                     });
 
                 scheduleModal.show();
@@ -169,28 +175,29 @@
 
         calendar.render();
 
-        $('#isRecurringCheck').on('change', function() {
-            if ($(this).is(':checked')) {
-                $('#recurrenceOptions').slideDown();
+        document.getElementById('isRecurringCheck').addEventListener('change', function() {
+            var recurrenceOptions = document.getElementById('recurrenceOptions');
+            if (this.checked) {
+                recurrenceOptions.style.display = 'block';
             } else {
-                $('#recurrenceOptions').slideUp();
+                recurrenceOptions.style.display = 'none';
             }
         });
 
-        $('#saveAppointmentBtn').on('click', function() {
+        document.getElementById('saveAppointmentBtn').addEventListener('click', function() {
             var selectedWeekdays = [];
-            $('.weekday-check:checked').each(function() {
-                selectedWeekdays.push($(this).val());
+            document.querySelectorAll('.weekday-check:checked').forEach(function(checkbox) {
+                selectedWeekdays.push(checkbox.value);
             });
 
             var appointmentData = {
-                patient_id: $('#patientSelect').val(),
-                start_datetime: $('#start_datetime').val(),
-                location: $('#locationInput').val(),
-                notes: $('#notesTextarea').val(),
-                is_recurring: $('#isRecurringCheck').is(':checked'),
+                patient_id: document.getElementById('patientSelect').value,
+                start_datetime: document.getElementById('start_datetime').value,
+                location: document.getElementById('locationInput').value,
+                notes: document.getElementById('notesTextarea').value,
+                is_recurring: document.getElementById('isRecurringCheck').checked,
                 weekdays: selectedWeekdays,
-                weeks_to_repeat: $('#weeksRepeatInput').val()
+                weeks_to_repeat: document.getElementById('weeksRepeatInput').value
             };
 
             if (!appointmentData.patient_id) {
