@@ -45,6 +45,7 @@ def inject_global_variables():
     return {'current_year': datetime.utcnow().year, 'today': date.today()}
 
 # --- ROTAS DE AUTENTICAÇÃO ---
+# ... (sem alterações aqui)
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if current_user.is_authenticated: return redirect(url_for('dashboard'))
@@ -80,6 +81,7 @@ def logout():
     return redirect(url_for('index'))
 
 # --- ROTAS PRINCIPAIS E DE VISUALIZAÇÃO ---
+# ... (sem alterações aqui)
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -99,6 +101,7 @@ def agenda():
     return render_template('agenda_grid.html')
 
 # --- ROTAS PARA PACIENTES ---
+# ... (sem alterações aqui)
 @app.route('/patients')
 @login_required
 def list_patients():
@@ -116,7 +119,6 @@ def list_patients():
         patients_enriched.append({'data': patient, 'appointment_count': appointment_count, 'latest_diagnosis': latest_diagnosis})
     return render_template('list_patients.html', patients_pagination=patients_pagination, patients_enriched=patients_enriched, search_query=search_query, title="Painel de Pacientes")
 
-# ... (outras rotas de paciente, sem alterações) ...
 @app.route('/patient/add', methods=['GET', 'POST'])
 @login_required
 def add_patient():
@@ -217,7 +219,6 @@ def view_assessment(assessment_id):
 
 
 # --- APIS E ROTAS DE AGENDAMENTO ---
-# ... (sem alterações aqui, exceto a rota reports no final)
 @app.route('/api/appointment/create_from_agenda', methods=['POST'])
 @login_required
 def create_from_agenda():
@@ -276,6 +277,19 @@ def update_financials(appointment_id):
         app.logger.error(f"Erro ao atualizar financeiro: {e}")
         return jsonify({'status': 'error', 'message': 'Ocorreu um erro interno.'}), 500
 
+# ROTA ADICIONADA: PARA CANCELAR UM AGENDAMENTO
+@app.route('/api/appointment/<int:appointment_id>/cancel', methods=['POST'])
+@login_required
+def cancel_appointment(appointment_id):
+    appointment = Appointment.query.get_or_404(appointment_id)
+    if appointment.user_id != current_user.id:
+        return jsonify({'status': 'error', 'message': 'Não autorizado'}), 403
+    
+    appointment.status = 'Cancelado'
+    db.session.commit()
+    return jsonify({'status': 'success', 'message': 'Agendamento cancelado com sucesso.'})
+
+
 @app.route('/api/patient/<int:patient_id>/financial_balance')
 @login_required
 def financial_balance(patient_id):
@@ -292,9 +306,32 @@ def financial_balance(patient_id):
 @login_required
 def api_appointments():
     appointments = Appointment.query.filter_by(user_id=current_user.id).all()
+    
+    # Adicionando cores para o status do agendamento
+    status_colors = {
+        'Concluído': '#198754', # Verde
+        'Agendado': '#0dcaf0',  # Azul claro
+        'Cancelado': '#6c757d'  # Cinza
+    }
+
     eventos = []
     for appt in appointments:
-        eventos.append({'id': appt.id, 'title': appt.patient.full_name, 'start': appt.start_time.isoformat(), 'extendedProps': {'location': appt.location, 'status': appt.status, 'notes': appt.notes, 'session_price': appt.session_price, 'amount_paid': appt.amount_paid, 'payment_notes': appt.payment_notes, 'patient_id': appt.patient_id}})
+        eventos.append({
+            'id': appt.id,
+            'title': appt.patient.full_name,
+            'start': appt.start_time.isoformat(),
+            'color': status_colors.get(appt.status, '#6c757d'), # Cor baseada no status
+            'borderColor': status_colors.get(appt.status, '#6c757d'),
+            'extendedProps': {
+                'location': appt.location,
+                'status': appt.status,
+                'notes': appt.notes,
+                'session_price': appt.session_price,
+                'amount_paid': appt.amount_paid,
+                'payment_notes': appt.payment_notes,
+                'patient_id': appt.patient_id
+            }
+        })
     return jsonify(eventos)
 
 @app.route('/api/patients')
@@ -303,55 +340,26 @@ def api_patients():
     patients = Patient.query.filter_by(user_id=current_user.id).order_by(Patient.full_name).all()
     return jsonify([{'id': p.id, 'name': p.full_name} for p in patients])
 
-# --- ROTA DE RELATÓRIOS (COM O NOVO PAINEL) ---
+# --- ROTA DE RELATÓRIOS ---
 @app.route('/reports')
 @login_required
 def reports():
     hoje = date.today()
     start_of_month = hoje.replace(day=1)
-    
-    # 1. Dados de status de atendimentos (sem alteração)
     appointments_this_month = Appointment.query.filter(Appointment.user_id == current_user.id, Appointment.start_time >= start_of_month).all()
     status_counts = {'Concluído': 0, 'Agendado': 0, 'Cancelado': 0}
     for appt in appointments_this_month:
         if appt.status in status_counts: status_counts[appt.status] += 1
-    
-    # 2. Dados financeiros (sem alteração)
     total_recebido_mes = db.session.query(func.sum(Appointment.amount_paid)).filter(Appointment.user_id == current_user.id, Appointment.start_time >= start_of_month).scalar() or 0.0
-
-    # 3. NOVOS DADOS: Contagem de atendimentos por paciente/mês
-    # Esta consulta agrupa os dados por nome do paciente e pelo mês do agendamento
-    results = db.session.query(
-        Patient.full_name,
-        func.to_char(Appointment.start_time, 'YYYY-MM').label('month'),
-        func.count(Appointment.id).label('session_count')
-    ).join(Appointment).filter(
-        Appointment.user_id == current_user.id,
-        # Filtro opcional: apenas dos últimos 12 meses para não sobrecarregar
-        Appointment.start_time >= (hoje - timedelta(days=365))
-    ).group_by(
-        Patient.full_name, 'month'
-    ).order_by(
-        Patient.full_name, 'month'
-    ).all()
-
-    # Transforma os resultados para um formato fácil de usar no template
+    results = db.session.query(Patient.full_name, func.to_char(Appointment.start_time, 'YYYY-MM').label('month'), func.count(Appointment.id).label('session_count')).join(Appointment).filter(Appointment.user_id == current_user.id, Appointment.start_time >= (hoje - timedelta(days=365))).group_by(Patient.full_name, 'month').order_by(Patient.full_name, 'month').all()
     patient_monthly_data = defaultdict(dict)
     all_months = set()
     for name, month, count in results:
         patient_monthly_data[name][month] = count
         all_months.add(month)
-    
-    # Ordena os meses para exibição correta nas colunas da tabela
     sorted_months = sorted(list(all_months))
+    return render_template('reports.html', status_counts=status_counts, total_recebido_mes=total_recebido_mes, patient_monthly_data=patient_monthly_data, sorted_months=sorted_months)
 
-    return render_template(
-        'reports.html', 
-        status_counts=status_counts, 
-        total_recebido_mes=total_recebido_mes,
-        patient_monthly_data=patient_monthly_data,
-        sorted_months=sorted_months
-    )
 
 # --- COMANDO PARA INICIALIZAR O BANCO DE DADOS ---
 @app.cli.command("init-db")
