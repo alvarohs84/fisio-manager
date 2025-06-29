@@ -8,6 +8,7 @@
         left: 50%;
         top: 50%;
         transform: translate(-50%, -50%);
+        z-index: 10;
     }
     .modal-body.loading .loading-spinner {
         display: block;
@@ -21,8 +22,9 @@
 
 {% block content %}
 <div class="card">
-    <div class="card-header">
+    <div class="card-header d-flex justify-content-between align-items-center">
         <h3>Agenda de Atendimentos</h3>
+        <a href="{{ url_for('schedule_appointment') }}" class="btn btn-sm btn-outline-primary">Formulário Completo</a>
     </div>
     <div class="card-body">
         <div id='calendar'></div>
@@ -88,6 +90,10 @@
                                 <input class="form-check-input weekday-check" type="checkbox" value="5" id="checkFri">
                                 <label class="form-check-label" for="checkFri">Sex</label>
                             </div>
+                             <div class="form-check form-check-inline">
+                                <input class="form-check-input weekday-check" type="checkbox" value="6" id="checkSat">
+                                <label class="form-check-label" for="checkSat">Sáb</label>
+                            </div>
                         </div>
                     </div>
                     <div class="mb-3">
@@ -128,25 +134,21 @@
                 right: 'dayGridMonth,timeGridWeek,timeGridDay'
             },
             initialView: 'timeGridWeek',
+            slotMinTime: '07:00:00',
+            slotMaxTime: '21:00:00',
             events: '/api/appointments',
-            editable: true, // Permite arrastar e redimensionar eventos (ainda não implementado no backend)
+            editable: true,
             selectable: true,
             
-            // Evento para quando um slot de data/hora é clicado
             dateClick: function(info) {
-                // Limpa o formulário do modal
                 document.getElementById('scheduleForm').reset();
                 $('#recurrenceOptions').hide();
-                
-                // Preenche a data e hora no campo escondido
                 $('#start_datetime').val(info.date.toISOString());
                 
-                // Atualiza o título do modal
                 var formattedDate = info.date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
                 var formattedTime = info.date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
                 $('#scheduleModalLabel').text('Novo Agendamento em ' + formattedDate + ' às ' + formattedTime);
 
-                // Mostra o spinner e busca os pacientes
                 var modalBody = $('.modal-body');
                 modalBody.addClass('loading');
                 fetch('/api/patients')
@@ -167,7 +169,6 @@
 
         calendar.render();
 
-        // Lógica para mostrar/esconder opções de recorrência
         $('#isRecurringCheck').on('change', function() {
             if ($(this).is(':checked')) {
                 $('#recurrenceOptions').slideDown();
@@ -176,7 +177,6 @@
             }
         });
 
-        // Lógica para salvar o agendamento
         $('#saveAppointmentBtn').on('click', function() {
             var selectedWeekdays = [];
             $('.weekday-check:checked').each(function() {
@@ -193,7 +193,6 @@
                 weeks_to_repeat: $('#weeksRepeatInput').val()
             };
 
-            // Validação simples
             if (!appointmentData.patient_id) {
                 alert('Por favor, selecione um paciente.');
                 return;
@@ -203,19 +202,16 @@
                 return;
             }
 
-            // Envia os dados para o backend
             fetch('/api/appointment/create_from_agenda', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(appointmentData),
             })
             .then(response => response.json())
             .then(data => {
                 if (data.status === 'success') {
                     scheduleModal.hide();
-                    calendar.refetchEvents(); // Atualiza o calendário para mostrar o novo evento
+                    calendar.refetchEvents();
                 } else {
                     alert('Erro ao salvar: ' + data.message);
                 }

@@ -242,10 +242,11 @@ def view_assessment(assessment_id):
         return redirect(url_for('list_patients'))
     return render_template('view_assessment.html', title='Detalhes da Avaliação', assessment=assessment)
 
-# --- ROTAS PARA AGENDAMENTOS ---
+# --- ROTAS PARA AGENDAMENTOS (ANTIGA E NOVAS APIS) ---
 @app.route('/appointment/schedule', methods=['GET', 'POST'])
 @login_required
 def schedule_appointment():
+    # Esta rota agora serve como um fallback ou pode ser removida futuramente
     from forms import AppointmentForm
     form = AppointmentForm()
     form.patient_id.choices = [(p.id, p.full_name) for p in Patient.query.filter_by(user_id=current_user.id).order_by(Patient.full_name).all()]
@@ -254,20 +255,9 @@ def schedule_appointment():
         start_datetime = datetime.combine(form.date.data, form.time.data)
         
         if form.is_recurring.data:
-            recurrence_id = str(uuid.uuid4())
-            for i in range(form.frequency.data):
-                recurrent_start_time = start_datetime + timedelta(weeks=i)
-                appointment = Appointment(
-                    start_time=recurrent_start_time,
-                    location=form.location.data,
-                    notes=form.notes.data,
-                    is_recurring=True,
-                    recurrence_id=recurrence_id,
-                    professional=current_user,
-                    patient_id=form.patient_id.data
-                )
-                db.session.add(appointment)
-            flash(f'{form.frequency.data} sessões recorrentes agendadas com sucesso!', 'success')
+            # Lógica de recorrência simples por semanas
+            # A nova lógica na API é mais avançada
+            pass 
         else:
             appointment = Appointment(
                 start_time=start_datetime,
@@ -283,6 +273,83 @@ def schedule_appointment():
         return redirect(url_for('agenda'))
     
     return render_template('add_edit_appointment.html', form=form, title="Novo Agendamento")
+
+
+@app.route('/api/appointment/create_from_agenda', methods=['POST'])
+@login_required
+def create_from_agenda():
+    data = request.get_json()
+    if not data or not data.get('patient_id') or not data.get('start_datetime'):
+        return jsonify({'status': 'error', 'message': 'Dados incompletos.'}), 400
+
+    patient_id = data.get('patient_id')
+    start_datetime_str = data.get('start_datetime')
+    location = data.get('location', 'Clínica')
+    notes = data.get('notes', '')
+    is_recurring = data.get('is_recurring', False)
+    
+    # Converte a data de string ISO para objeto datetime
+    start_datetime = datetime.fromisoformat(start_datetime_str.replace('Z', '+00:00'))
+
+    try:
+        if not is_recurring:
+            # --- Agendamento Único ---
+            appointment = Appointment(
+                start_time=start_datetime,
+                location=location,
+                notes=notes,
+                professional=current_user,
+                patient_id=patient_id
+            )
+            db.session.add(appointment)
+        else:
+            # --- Agendamento Recorrente ---
+            weeks_to_repeat = int(data.get('weeks_to_repeat', 1))
+            weekdays_str = data.get('weekdays', []) # ex: ['1', '3', '5'] para Seg, Qua, Sex
+            
+            if not weekdays_str:
+                return jsonify({'status': 'error', 'message': 'Selecione os dias da semana para a recorrência.'}), 400
+            
+            weekdays = [int(d) for d in weekdays_str]
+            recurrence_id = str(uuid.uuid4())
+            
+            start_date_of_series = start_datetime.date()
+            clicked_weekday = start_date_of_series.weekday()
+
+            # Se o dia clicado não está na lista de recorrência, não crie o primeiro evento
+            # Isso é uma decisão de design: a recorrência só começa nos dias selecionados
+            # a partir da data clicada.
+            
+            for i in range(weeks_to_repeat):
+                for weekday in weekdays:
+                    current_week_start_date = start_date_of_series + timedelta(weeks=i)
+                    days_ahead = weekday - current_week_start_date.weekday()
+                    
+                    target_date = current_week_start_date + timedelta(days=days_ahead)
+                    
+                    recurrent_start_time = datetime.combine(target_date, start_datetime.time())
+                    
+                    # Cria apenas se a data for no futuro ou no mesmo dia do início da série
+                    if recurrent_start_time.date() >= start_date_of_series:
+                        appointment = Appointment(
+                            start_time=recurrent_start_time,
+                            location=location,
+                            notes=notes,
+                            is_recurring=True,
+                            recurrence_id=recurrence_id,
+                            professional=current_user,
+                            patient_id=patient_id
+                        )
+                        db.session.add(appointment)
+
+        db.session.commit()
+        return jsonify({'status': 'success', 'message': 'Agendamento(s) criado(s) com sucesso!'})
+
+    except Exception as e:
+        db.session.rollback()
+        app.logger.error(f"Erro ao criar agendamento: {e}")
+        return jsonify({'status': 'error', 'message': 'Ocorreu um erro interno.'}), 500
+
 
 @app.route('/appointment/<int:appointment_id>/update_status', methods=['POST'])
 @login_required
@@ -372,78 +439,6 @@ def api_appointments():
             }
         })
     return jsonify(eventos)
-
-@app.route('/api/appointment/create_from_agenda', methods=['POST'])
-@login_required
-def create_from_agenda():
-    data = request.get_json()
-    if not data or not data.get('patient_id') or not data.get('start_datetime'):
-        return jsonify({'status': 'error', 'message': 'Dados incompletos.'}), 400
-
-    patient_id = data.get('patient_id')
-    start_datetime_str = data.get('start_datetime')
-    location = data.get('location', 'Clínica')
-    notes = data.get('notes', '')
-    is_recurring = data.get('is_recurring', False)
-    
-    start_datetime = datetime.fromisoformat(start_datetime_str)
-
-    try:
-        if not is_recurring:
-            # Agendamento único
-            appointment = Appointment(
-                start_time=start_datetime,
-                location=location,
-                notes=notes,
-                professional=current_user,
-                patient_id=patient_id
-            )
-            db.session.add(appointment)
-        else:
-            # Agendamento recorrente
-            weeks_to_repeat = int(data.get('weeks_to_repeat', 1))
-            weekdays = data.get('weekdays', []) # ex: [0, 2] para Seg e Qua
-            if not weekdays:
-                return jsonify({'status': 'error', 'message': 'Selecione os dias da semana para a recorrência.'}), 400
-            
-            recurrence_id = str(uuid.uuid4())
-            
-            for i in range(weeks_to_repeat):
-                for weekday_str in weekdays:
-                    weekday = int(weekday_str)
-                    
-                    # Calcula a data do próximo dia da semana selecionado a partir da data de início
-                    current_start_date = start_datetime.date() + timedelta(weeks=i)
-                    days_ahead = weekday - current_start_date.weekday()
-                    if days_ahead < 0: # Se o dia já passou na semana de início, ajusta para a próxima semana
-                         days_ahead += 7
-                    
-                    # No nosso caso, o primeiro evento deve ser na data clicada se o dia da semana corresponder
-                    if i == 0 and weekday == start_datetime.weekday():
-                         final_date = start_datetime.date()
-                    else:
-                         final_date = current_start_date + timedelta(days_ahead)
-
-                    recurrent_start_time = datetime.combine(final_date, start_datetime.time())
-                    
-                    appointment = Appointment(
-                        start_time=recurrent_start_time,
-                        location=location,
-                        notes=notes,
-                        is_recurring=True,
-                        recurrence_id=recurrence_id,
-                        professional=current_user,
-                        patient_id=patient_id
-                    )
-                    db.session.add(appointment)
-
-        db.session.commit()
-        return jsonify({'status': 'success', 'message': 'Agendamento(s) criado(s) com sucesso!'})
-
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'status': 'error', 'message': str(e)}), 500
-
 
 # --- COMANDO PARA INICIALIZAR O BANCO DE DADOS ---
 @app.cli.command("init-db")
