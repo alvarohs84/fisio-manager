@@ -6,19 +6,11 @@
 </div>
 
 <div class="row mb-4">
-    <div class="col-md-6">
+    <div class="col-md-12">
         <div class="card text-white bg-success">
-            <div class="card-body">
+            <div class="card-body text-center">
                 <h5 class="card-title">Total Recebido este Mês</h5>
-                <p class="card-text fs-2">R$ {{ "%.2f"|format(total_recebido)|replace('.', ',') }}</p>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-6">
-        <div class="card text-dark bg-warning">
-            <div class="card-body">
-                <h5 class="card-title">Total Pendente este Mês</h5>
-                <p class="card-text fs-2">R$ {{ "%.2f"|format(total_pendente)|replace('.', ',') }}</p>
+                <p class="card-text display-4">R$ {{ "%.2f"|format(total_recebido_mes)|replace('.', ',') }}</p>
             </div>
         </div>
     </div>

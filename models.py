@@ -39,16 +39,17 @@ class Patient(db.Model):
     def __repr__(self): return f'<Patient {self.full_name}>'
 
 class Appointment(db.Model):
-    """Modelo para o Agendamento"""
+    """Modelo para o Agendamento com Financeiro Detalhado"""
     id = db.Column(db.Integer, primary_key=True)
     start_time = db.Column(db.DateTime, nullable=False)
     location = db.Column(db.String(150), nullable=False)
-    status = db.Column(db.String(30), default='Agendado') # Status do atendimento
+    status = db.Column(db.String(30), default='Agendado')
     notes = db.Column(db.Text, nullable=True)
 
-    # CAMPOS FINANCEIROS ADICIONADOS
-    price = db.Column(db.Float, nullable=True)
-    payment_status = db.Column(db.String(30), default='Pendente') # Pendente, Pago
+    # CAMPOS FINANCEIROS ATUALIZADOS
+    session_price = db.Column(db.Float, nullable=True)  # Preço desta sessão específica
+    amount_paid = db.Column(db.Float, default=0.0)      # Valor efetivamente pago nesta sessão
+    payment_notes = db.Column(db.Text, nullable=True)   # Anotações sobre o pagamento
 
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     patient_id = db.Column(db.Integer, db.ForeignKey('patient.id'), nullable=False)
