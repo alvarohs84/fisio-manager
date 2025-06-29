@@ -277,17 +277,27 @@ def update_financials(appointment_id):
         app.logger.error(f"Erro ao atualizar financeiro: {e}")
         return jsonify({'status': 'error', 'message': 'Ocorreu um erro interno.'}), 500
 
-# ROTA ADICIONADA: PARA CANCELAR UM AGENDAMENTO
 @app.route('/api/appointment/<int:appointment_id>/cancel', methods=['POST'])
 @login_required
 def cancel_appointment(appointment_id):
     appointment = Appointment.query.get_or_404(appointment_id)
     if appointment.user_id != current_user.id:
         return jsonify({'status': 'error', 'message': 'Não autorizado'}), 403
-    
     appointment.status = 'Cancelado'
     db.session.commit()
     return jsonify({'status': 'success', 'message': 'Agendamento cancelado com sucesso.'})
+
+# ROTA ADICIONADA: PARA APAGAR PERMANENTEMENTE UM AGENDAMENTO
+@app.route('/api/appointment/<int:appointment_id>/delete', methods=['POST'])
+@login_required
+def delete_appointment(appointment_id):
+    appointment = Appointment.query.get_or_404(appointment_id)
+    if appointment.user_id != current_user.id:
+        return jsonify({'status': 'error', 'message': 'Não autorizado'}), 403
+    
+    db.session.delete(appointment)
+    db.session.commit()
+    return jsonify({'status': 'success', 'message': 'Agendamento apagado permanentemente.'})
 
 
 @app.route('/api/patient/<int:patient_id>/financial_balance')
@@ -306,21 +316,14 @@ def financial_balance(patient_id):
 @login_required
 def api_appointments():
     appointments = Appointment.query.filter_by(user_id=current_user.id).all()
-    
-    # Adicionando cores para o status do agendamento
-    status_colors = {
-        'Concluído': '#198754', # Verde
-        'Agendado': '#0dcaf0',  # Azul claro
-        'Cancelado': '#6c757d'  # Cinza
-    }
-
+    status_colors = {'Concluído': '#198754', 'Agendado': '#0dcaf0', 'Cancelado': '#6c757d'}
     eventos = []
     for appt in appointments:
         eventos.append({
             'id': appt.id,
             'title': appt.patient.full_name,
             'start': appt.start_time.isoformat(),
-            'color': status_colors.get(appt.status, '#6c757d'), # Cor baseada no status
+            'color': status_colors.get(appt.status, '#6c757d'),
             'borderColor': status_colors.get(appt.status, '#6c757d'),
             'extendedProps': {
                 'location': appt.location,
