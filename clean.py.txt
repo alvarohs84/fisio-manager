@@ -1,0 +1,30 @@
+# clean.py
+import os
+import shutil
+
+print("--- Iniciando limpeza forçada do ambiente local ---")
+
+# Ficheiro do banco de dados a ser apagado
+db_file = 'app.db'
+if os.path.exists(db_file):
+    try:
+        os.remove(db_file)
+        print(f"[SUCESSO] Ficheiro '{db_file}' apagado.")
+    except Exception as e:
+        print(f"[ERRO] Não foi possível apagar o ficheiro '{db_file}': {e}")
+else:
+    print(f"[INFO] Ficheiro '{db_file}' não encontrado, nada a fazer.")
+
+# Pasta de migrações a ser apagada
+migrations_folder = 'migrations'
+if os.path.exists(migrations_folder):
+    try:
+        shutil.rmtree(migrations_folder)
+        print(f"[SUCESSO] Pasta '{migrations_folder}' e todo o seu conteúdo foram apagados.")
+    except Exception as e:
+        print(f"[ERRO] Não foi possível apagar a pasta '{migrations_folder}': {e}")
+else:
+    print(f"[INFO] Pasta '{migrations_folder}' não encontrada, nada a fazer.")
+
+print("\n--- Limpeza concluída! ---")
+print("Agora, pode executar os comandos 'flask db init', 'migrate' e 'upgrade' com segurança.")

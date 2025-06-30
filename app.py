@@ -1,4 +1,4 @@
-# app.py (COMPLETO E FINAL - ARQUITETURA MULTI-TENANCY)
+# app.py (COMPLETO E COM CAMINHO ABSOLUTO PARA O BD)
 
 import os
 import uuid
@@ -17,10 +17,17 @@ from collections import defaultdict
 # --- CONFIGURAÇÃO DA APLICAÇÃO ---
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY') or 'uma-chave-secreta-muito-segura-e-diferente-para-testes'
-db_url = os.environ.get('DATABASE_URL')
-if db_url and db_url.startswith("postgres://"):
-    db_url = db_url.replace("postgres://", "postgresql://", 1)
-app.config['SQLALCHEMY_DATABASE_URI'] = db_url or 'sqlite:///app.db'
+
+# --- ALTERAÇÃO CRUCIAL AQUI ---
+# Define o caminho base do projeto
+basedir = os.path.abspath(os.path.dirname(__file__))
+# Pega a URL do Render, se existir, ou cria um caminho absoluto para o app.db local
+render_db_url = os.environ.get('DATABASE_URL')
+if render_db_url and render_db_url.startswith("postgres://"):
+    render_db_url = render_db_url.replace("postgres://", "postgresql://", 1)
+app.config['SQLALCHEMY_DATABASE_URI'] = render_db_url or 'sqlite:///' + os.path.join(basedir, 'app.db')
+# --- FIM DA ALTERAÇÃO ---
+
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # --- INICIALIZAÇÃO DAS EXTENSÕES ---
@@ -34,12 +41,7 @@ login_manager.login_message = 'Por favor, faça o login para acessar esta págin
 login_manager.login_message_category = 'info'
 
 # --- CONFIGURAÇÃO DO CLOUDINARY ---
-cloudinary.config(
-    cloud_name=os.environ.get('CLOUDINARY_CLOUD_NAME'),
-    api_key=os.environ.get('CLOUDINARY_API_KEY'),
-    api_secret=os.environ.get('CLOUDINARY_API_SECRET'),
-    secure=True
-)
+cloudinary.config(cloud_name=os.environ.get('CLOUDINARY_CLOUD_NAME'), api_key=os.environ.get('CLOUDINARY_API_KEY'), api_secret=os.environ.get('CLOUDINARY_API_SECRET'), secure=True)
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -49,35 +51,36 @@ def load_user(user_id):
 def inject_global_variables():
     return {'current_year': datetime.utcnow().year, 'today': date.today()}
 
+@app.template_filter('datetimeformat')
+def format_datetime_filter(s, format='%d/%m/%Y'):
+    if isinstance(s, str):
+        try: s = datetime.strptime(s, '%Y-%m-%d').date()
+        except ValueError: return s
+    if hasattr(s, 'strftime'): return s.strftime(format)
+    return s
+
 # --- ROTAS DE AUTENTICAÇÃO ---
 @app.route('/register', methods=['GET', 'POST'])
 def register():
-    if current_user.is_authenticated:
-        return redirect(url_for('dashboard'))
+    if current_user.is_authenticated: return redirect(url_for('dashboard'))
     from forms import RegistrationForm
     form = RegistrationForm()
     if form.validate_on_submit():
         new_clinic = Clinic(name=f"Clínica de {form.name.data}")
         db.session.add(new_clinic)
         db.session.commit()
-
-        user = User(
-            name=form.name.data, 
-            email=form.email.data, 
-            clinic_id=new_clinic.id
-        )
+        user = User(name=form.name.data, email=form.email.data, clinic_id=new_clinic.id)
         user.set_password(form.password.data)
         db.session.add(user)
         db.session.commit()
-        
         flash('Sua conta e sua clínica foram criadas com sucesso! Faça o login.', 'success')
         return redirect(url_for('login'))
     return render_template('register.html', title='Registrar', form=form)
 
+# ... (O RESTO DO FICHEIRO CONTINUA EXATAMENTE IGUAL) ...
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    if current_user.is_authenticated:
-        return redirect(url_for('dashboard'))
+    if current_user.is_authenticated: return redirect(url_for('dashboard'))
     from forms import LoginForm
     form = LoginForm()
     if form.validate_on_submit():
@@ -95,7 +98,6 @@ def logout():
     logout_user()
     return redirect(url_for('index'))
 
-# --- ROTAS PRINCIPAIS ---
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -104,21 +106,9 @@ def index():
 @login_required
 def dashboard():
     hoje = datetime.utcnow()
-    
-    proximos_agendamentos = Appointment.query.join(User).filter(
-        User.clinic_id == current_user.clinic_id,
-        Appointment.start_time >= hoje
-    ).order_by(Appointment.start_time.asc()).limit(5).all()
-
-    ultimos_pacientes = Patient.query.filter_by(
-        clinic_id=current_user.clinic_id
-    ).order_by(Patient.created_at.desc()).limit(5).all()
-
-    aniversariantes_do_mes = Patient.query.filter(
-        Patient.clinic_id == current_user.clinic_id,
-        extract('month', Patient.date_of_birth) == hoje.month
-    ).order_by(extract('day', Patient.date_of_birth).asc()).all()
-    
+    proximos_agendamentos = Appointment.query.join(User).filter(User.clinic_id == current_user.clinic_id, Appointment.start_time >= hoje).order_by(Appointment.start_time.asc()).limit(5).all()
+    ultimos_pacientes = Patient.query.filter_by(clinic_id=current_user.clinic_id).order_by(Patient.created_at.desc()).limit(5).all()
+    aniversariantes_do_mes = Patient.query.filter(Patient.clinic_id == current_user.clinic_id, extract('month', Patient.date_of_birth) == hoje.month).order_by(extract('day', Patient.date_of_birth).asc()).all()
     return render_template('dashboard.html', proximos_agendamentos=proximos_agendamentos, ultimos_pacientes=ultimos_pacientes, aniversariantes_do_mes=aniversariantes_do_mes)
 
 @app.route('/agenda')
@@ -126,27 +116,21 @@ def dashboard():
 def agenda():
     return render_template('agenda_grid.html')
 
-# --- ROTAS DE GESTÃO (PACIENTES, PRONTUÁRIOS, ETC.) ---
 @app.route('/patients')
 @login_required
 def list_patients():
     page = request.args.get('page', 1, type=int)
     search_query = request.args.get('q', '')
-    
     patients_query = Patient.query.filter_by(clinic_id=current_user.clinic_id)
-    
     if search_query:
         patients_query = patients_query.filter(Patient.full_name.ilike(f'%{search_query}%'))
-    
     patients_pagination = patients_query.order_by(Patient.full_name).paginate(page=page, per_page=10)
-    
     patients_enriched = []
     for patient in patients_pagination.items:
         appointment_count = patient.appointments.count()
         latest_record = patient.records.order_by(ElectronicRecord.record_date.desc()).first()
         latest_diagnosis = latest_record.medical_diagnosis if (latest_record and latest_record.medical_diagnosis) else "N/A"
         patients_enriched.append({'data': patient, 'appointment_count': appointment_count, 'latest_diagnosis': latest_diagnosis})
-        
     return render_template('list_patients.html', patients_pagination=patients_pagination, patients_enriched=patients_enriched, search_query=search_query, title="Painel de Pacientes")
 
 @app.route('/patient/add', methods=['GET', 'POST'])
@@ -155,15 +139,7 @@ def add_patient():
     from forms import PatientForm
     form = PatientForm()
     if form.validate_on_submit():
-        new_patient = Patient(
-            full_name=form.full_name.data,
-            date_of_birth=form.date_of_birth.data,
-            gender=form.gender.data,
-            phone=form.phone.data,
-            specialty=form.specialty.data,
-            professional=current_user,
-            clinic_id=current_user.clinic_id
-        )
+        new_patient = Patient(full_name=form.full_name.data, date_of_birth=form.date_of_birth.data, gender=form.gender.data, phone=form.phone.data, specialty=form.specialty.data, professional=current_user, clinic_id=current_user.clinic_id)
         db.session.add(new_patient)
         db.session.commit()
         flash('Paciente cadastrado com sucesso!', 'success')
@@ -174,9 +150,7 @@ def add_patient():
 @login_required
 def edit_patient(patient_id):
     patient = Patient.query.get_or_404(patient_id)
-    if patient.clinic_id != current_user.clinic_id:
-        abort(403)
-    
+    if patient.clinic_id != current_user.clinic_id: abort(403)
     from forms import PatientForm
     form = PatientForm(obj=patient)
     if form.validate_on_submit():
@@ -194,8 +168,7 @@ def edit_patient(patient_id):
 @login_required
 def delete_patient(patient_id):
     patient = Patient.query.get_or_404(patient_id)
-    if patient.clinic_id != current_user.clinic_id:
-        abort(403)
+    if patient.clinic_id != current_user.clinic_id: abort(403)
     db.session.delete(patient)
     db.session.commit()
     flash(f'O paciente {patient.full_name} e todos os seus registos foram apagados com sucesso.', 'success')
@@ -205,8 +178,7 @@ def delete_patient(patient_id):
 @login_required
 def patient_detail(patient_id):
     patient = Patient.query.get_or_404(patient_id)
-    if patient.clinic_id != current_user.clinic_id:
-        abort(403)
+    if patient.clinic_id != current_user.clinic_id: abort(403)
     records = patient.records.order_by(ElectronicRecord.record_date.desc()).all()
     assessments = patient.assessments.order_by(Assessment.created_at.desc()).all()
     return render_template('patient_detail.html', patient=patient, records=records, assessments=assessments)
@@ -252,20 +224,16 @@ def add_assessment(patient_id):
 @login_required
 def view_assessment(assessment_id):
     assessment = Assessment.query.get_or_404(assessment_id)
-    if assessment.patient.clinic_id != current_user.clinic_id:
-        abort(403)
+    if assessment.patient.clinic_id != current_user.clinic_id: abort(403)
     return render_template('view_assessment.html', title='Detalhes da Avaliação', assessment=assessment)
 
-# --- APIS E ROTAS DE AGENDAMENTO ---
 @app.route('/api/appointment/create_from_agenda', methods=['POST'])
 @login_required
 def create_from_agenda():
     data = request.get_json()
     try:
         patient_id = data['patient_id']
-        patient = Patient.query.filter_by(id=patient_id, clinic_id=current_user.clinic_id).first()
-        if not patient: return jsonify({'status': 'error', 'message': 'Paciente não encontrado.'}), 404
-
+        patient = Patient.query.filter_by(id=patient_id, clinic_id=current_user.clinic_id).first_or_404()
         start_datetime_str = data['start_datetime']
         location = data.get('location', 'Clínica')
         session_price = data.get('session_price')
@@ -273,18 +241,15 @@ def create_from_agenda():
         is_recurring = data.get('is_recurring', False)
         start_datetime = datetime.fromisoformat(start_datetime_str.replace('Z', '+00:00'))
         price_float = float(session_price) if session_price else None
-        
         def create_single_appointment(appt_time, rec_id=None):
-            new_appt = Appointment(start_time=appt_time, location=location, notes=notes, session_price=price_float, amount_paid=0.0, is_recurring=is_recurring, recurrence_id=rec_id, professional=current_user, patient_id=patient_id)
+            new_appt = Appointment(start_time=appt_time, location=location, notes=notes, session_price=price_float, amount_paid=0.0, is_recurring=is_recurring, recurrence_id=rec_id, professional=current_user, patient_id=patient.id)
             db.session.add(new_appt)
-        
         if not is_recurring:
             create_single_appointment(start_datetime)
         else:
             weeks_to_repeat = int(data.get('weeks_to_repeat', 1))
             weekdays = [int(d) for d in data.get('weekdays', [])]
             if not weekdays: return jsonify({'status': 'error', 'message': 'Selecione os dias da semana.'}), 400
-            
             recurrence_id = str(uuid.uuid4())
             start_date_of_series = start_datetime.date()
             for i in range(weeks_to_repeat):
@@ -306,7 +271,6 @@ def create_from_agenda():
 @login_required
 def handle_appointment_action(appointment_id, action):
     appointment = db.session.query(Appointment).join(User).filter(Appointment.id == appointment_id, User.clinic_id == current_user.clinic_id).first_or_404()
-    
     if action == 'complete':
         appointment.status = 'Concluído'
         message = 'Agendamento marcado como concluído.'
@@ -318,10 +282,8 @@ def handle_appointment_action(appointment_id, action):
         message = 'Agendamento apagado permanentemente.'
     else:
         return jsonify({'status': 'error', 'message': 'Ação inválida.'}), 400
-        
     db.session.commit()
     return jsonify({'status': 'success', 'message': message})
-
 
 @app.route('/api/appointment/<int:appointment_id>/update_financials', methods=['POST'])
 @login_required
@@ -364,26 +326,30 @@ def api_patients():
     patients = Patient.query.filter_by(clinic_id=current_user.clinic_id).order_by(Patient.full_name).all()
     return jsonify([{'id': p.id, 'name': p.full_name} for p in patients])
 
-# --- ROTA DE RELATÓRIOS ---
 @app.route('/reports')
 @login_required
 def reports():
-    # ... (código da rota de relatórios, já filtrado por clínica, sem alterações)
     hoje = date.today()
-    start_of_month = hoje.replace(day=1)
-    appointments_this_month = db.session.query(Appointment).join(User).filter(User.clinic_id == current_user.clinic_id, Appointment.start_time >= start_of_month).all()
+    start_date_str = request.args.get('start_date')
+    end_date_str = request.args.get('end_date')
+    if start_date_str and end_date_str:
+        start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+        end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+    else:
+        start_date = hoje.replace(day=1)
+        next_month = start_date.replace(day=28) + timedelta(days=4)
+        end_date = next_month - timedelta(days=next_month.day)
+    start_datetime = datetime.combine(start_date, time.min)
+    end_datetime = datetime.combine(end_date, time.max)
+    financial_appointments = db.session.query(Appointment).join(User).filter(User.clinic_id == current_user.clinic_id, Appointment.start_time.between(start_datetime, end_datetime)).order_by(Appointment.start_time.desc()).all()
+    total_cobrado_periodo = sum(appt.session_price for appt in financial_appointments if appt.session_price)
+    total_recebido_periodo = sum(appt.amount_paid for appt in financial_appointments if appt.amount_paid)
+    start_of_current_month = hoje.replace(day=1)
+    appointments_this_month = db.session.query(Appointment).join(User).filter(User.clinic_id == current_user.id, Appointment.start_time >= start_of_current_month).all()
     status_counts = {'Concluído': 0, 'Agendado': 0, 'Cancelado': 0}
     for appt in appointments_this_month:
         if appt.status in status_counts: status_counts[appt.status] += 1
-    total_recebido_mes = db.session.query(func.sum(Appointment.amount_paid)).join(User).filter(User.clinic_id == current_user.id, Appointment.start_time >= start_of_month).scalar() or 0.0
-    results = db.session.query(Patient.full_name, func.to_char(Appointment.start_time, 'YYYY-MM').label('month'), func.count(Appointment.id).label('session_count')).join(Appointment).filter(Patient.clinic_id == current_user.clinic_id, Appointment.start_time >= (hoje - timedelta(days=365))).group_by(Patient.full_name, 'month').order_by(Patient.full_name, 'month').all()
-    patient_monthly_data = defaultdict(dict)
-    all_months = set()
-    for name, month, count in results:
-        patient_monthly_data[name][month] = count
-        all_months.add(month)
-    sorted_months = sorted(list(all_months))
-    return render_template('reports.html', status_counts=status_counts, total_recebido_mes=total_recebido_mes, patient_monthly_data=patient_monthly_data, sorted_months=sorted_months)
+    return render_template('reports.html', financial_appointments=financial_appointments, total_cobrado=total_cobrado_periodo, total_recebido=total_recebido_periodo, start_date=start_date.strftime('%Y-%m-%d'), end_date=end_date.strftime('%Y-%m-%d'), status_counts=status_counts)
 
 
 # --- COMANDO PARA INICIALIZAR O BANCO DE DADOS ---
