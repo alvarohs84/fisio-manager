@@ -17,10 +17,14 @@ from collections import defaultdict
 # --- CONFIGURAÇÃO DA APLICAÇÃO ---
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY') or 'uma-chave-secreta-muito-segura-e-diferente-para-testes'
-db_url = os.environ.get('DATABASE_URL')
-if db_url and db_url.startswith("postgres://"):
-    db_url = db_url.replace("postgres://", "postgresql://", 1)
-app.config['SQLALCHEMY_DATABASE_URI'] = db_url or 'sqlite:///app.db'
+
+# Define o caminho base do projeto
+basedir = os.path.abspath(os.path.dirname(__file__))
+# Pega a URL do Render, se existir, ou cria um caminho absoluto para o app.db local
+render_db_url = os.environ.get('DATABASE_URL')
+if render_db_url and render_db_url.startswith("postgres://"):
+    render_db_url = render_db_url.replace("postgres://", "postgresql://", 1)
+app.config['SQLALCHEMY_DATABASE_URI'] = render_db_url or 'sqlite:///' + os.path.join(basedir, 'app.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # --- INICIALIZAÇÃO DAS EXTENSÕES ---
@@ -44,8 +48,15 @@ def load_user(user_id):
 def inject_global_variables():
     return {'current_year': datetime.utcnow().year, 'today': date.today()}
 
-# --- ROTAS DE AUTENTICAÇÃO E GESTÃO (sem alterações) ---
-# ... (todas as rotas desde /register até /assessment/<id> permanecem iguais)
+@app.template_filter('datetimeformat')
+def format_datetime_filter(s, format='%d/%m/%Y'):
+    if isinstance(s, str):
+        try: s = datetime.strptime(s, '%Y-%m-%d').date()
+        except ValueError: return s
+    if hasattr(s, 'strftime'): return s.strftime(format)
+    return s
+
+# --- ROTAS DE AUTENTICAÇÃO ---
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if current_user.is_authenticated: return redirect(url_for('dashboard'))
@@ -87,6 +98,7 @@ def logout():
 def index():
     return render_template('index.html')
 
+# --- ROTAS PRINCIPAIS E DE GESTÃO ---
 @app.route('/dashboard')
 @login_required
 def dashboard():
@@ -213,37 +225,6 @@ def view_assessment(assessment_id):
     return render_template('view_assessment.html', title='Detalhes da Avaliação', assessment=assessment)
 
 # --- APIS E ROTAS DE AGENDAMENTO ---
-# ... (a maioria das APIs permanece igual)
-
-# ROTA ADICIONADA: PARA SALVAR AS ALTERAÇÕES DO AGENDAMENTO
-@app.route('/api/appointment/<int:appointment_id>/update', methods=['POST'])
-@login_required
-def update_appointment(appointment_id):
-    appointment = db.session.query(Appointment).join(User).filter(
-        Appointment.id == appointment_id,
-        User.clinic_id == current_user.clinic_id
-    ).first_or_404()
-    
-    data = request.get_json()
-    try:
-        if 'start_time' in data and data['start_time']:
-            appointment.start_time = datetime.fromisoformat(data['start_time'].replace('Z', '+00:00'))
-        if 'location' in data:
-            appointment.location = data['location']
-        if 'session_price' in data:
-            appointment.session_price = float(data['session_price'] or 0.0)
-        if 'notes' in data:
-            appointment.notes = data['notes']
-            
-        db.session.commit()
-        return jsonify({'status': 'success', 'message': 'Agendamento atualizado com sucesso.'})
-    except Exception as e:
-        db.session.rollback()
-        app.logger.error(f"Erro ao atualizar agendamento: {e}")
-        return jsonify({'status': 'error', 'message': f'Ocorreu um erro interno: {e}'}), 500
-
-
-# ... (o resto das suas APIs e rotas, sem alterações)
 @app.route('/api/appointment/create_from_agenda', methods=['POST'])
 @login_required
 def create_from_agenda():
@@ -284,19 +265,25 @@ def create_from_agenda():
         app.logger.error(f"Erro ao criar agendamento: {e}")
         return jsonify({'status': 'error', 'message': f'Ocorreu um erro interno: {e}'}), 500
 
-@app.route('/api/appointment/<int:appointment_id>/update_financials', methods=['POST'])
+@app.route('/api/appointment/<int:appointment_id>/update', methods=['POST'])
 @login_required
-def update_financials(appointment_id):
+def update_appointment(appointment_id):
     appointment = db.session.query(Appointment).join(User).filter(Appointment.id == appointment_id, User.clinic_id == current_user.clinic_id).first_or_404()
     data = request.get_json()
     try:
-        appointment.session_price = float(data.get('session_price', 0.0) or 0.0)
-        appointment.amount_paid = float(data.get('amount_paid', 0.0) or 0.0)
-        appointment.payment_notes = data.get('payment_notes', '')
+        if 'start_time' in data and data['start_time']:
+            appointment.start_time = datetime.fromisoformat(data['start_time'].replace('Z', '+00:00'))
+        if 'location' in data: appointment.location = data['location']
+        if 'notes' in data: appointment.notes = data['notes']
+        if 'session_price' in data: appointment.session_price = float(data.get('session_price', 0.0) or 0.0)
+        if 'amount_paid' in data: appointment.amount_paid = float(data.get('amount_paid', 0.0) or 0.0)
+        if 'payment_notes' in data: appointment.payment_notes = data.get('payment_notes', '')
         db.session.commit()
-        return jsonify({'status': 'success', 'message': 'Dados financeiros atualizados.'})
-    except (ValueError, TypeError):
-        return jsonify({'status': 'error', 'message': 'Valores inválidos. Use apenas números.'}), 400
+        return jsonify({'status': 'success', 'message': 'Agendamento atualizado com sucesso.'})
+    except Exception as e:
+        db.session.rollback()
+        app.logger.error(f"Erro ao atualizar agendamento: {e}")
+        return jsonify({'status': 'error', 'message': f'Ocorreu um erro interno: {e}'}), 500
 
 @app.route('/api/appointment/<int:appointment_id>/<action>', methods=['POST'])
 @login_required
@@ -316,6 +303,31 @@ def handle_appointment_action(appointment_id, action):
     db.session.commit()
     return jsonify({'status': 'success', 'message': message})
 
+# ROTA ADICIONADA: PARA CANCELAR UMA SÉRIE DE AGENDAMENTOS RECORRENTES
+@app.route('/api/appointments/cancel_series', methods=['POST'])
+@login_required
+def cancel_recurring_series():
+    data = request.get_json()
+    recurrence_id = data.get('recurrence_id')
+    if not recurrence_id:
+        return jsonify({'status': 'error', 'message': 'ID de recorrência não fornecido.'}), 400
+
+    now = datetime.utcnow()
+    appointments_to_cancel = db.session.query(Appointment).join(User).filter(
+        User.clinic_id == current_user.clinic_id,
+        Appointment.recurrence_id == recurrence_id,
+        Appointment.start_time >= now
+    ).all()
+
+    if not appointments_to_cancel:
+        return jsonify({'status': 'error', 'message': 'Nenhum agendamento futuro encontrado para esta série.'}), 404
+
+    for appt in appointments_to_cancel:
+        appt.status = 'Cancelado'
+    
+    db.session.commit()
+    return jsonify({'status': 'success', 'message': f'{len(appointments_to_cancel)} agendamentos futuros foram cancelados.'})
+
 @app.route('/api/patient/<int:patient_id>/financial_balance')
 @login_required
 def financial_balance(patient_id):
@@ -334,7 +346,23 @@ def api_appointments():
     status_colors = {'Concluído': '#198754', 'Agendado': '#0dcaf0', 'Cancelado': '#6c757d'}
     eventos = []
     for appt in appointments:
-        eventos.append({'id': appt.id, 'title': appt.patient.full_name, 'start': appt.start_time.isoformat(), 'color': status_colors.get(appt.status, '#6c757d'), 'borderColor': status_colors.get(appt.status, '#6c757d'), 'extendedProps': {'location': appt.location, 'status': appt.status, 'notes': appt.notes, 'session_price': appt.session_price, 'amount_paid': appt.amount_paid, 'payment_notes': appt.payment_notes, 'patient_id': appt.patient_id}})
+        eventos.append({
+            'id': appt.id, 
+            'title': appt.patient.full_name, 
+            'start': appt.start_time.isoformat(), 
+            'color': status_colors.get(appt.status, '#6c757d'), 
+            'borderColor': status_colors.get(appt.status, '#6c757d'), 
+            'extendedProps': {
+                'location': appt.location, 
+                'status': appt.status, 
+                'notes': appt.notes, 
+                'session_price': appt.session_price, 
+                'amount_paid': appt.amount_paid, 
+                'payment_notes': appt.payment_notes, 
+                'patient_id': appt.patient_id,
+                'recurrence_id': appt.recurrence_id # Passa o ID da recorrência para o frontend
+            }
+        })
     return jsonify(eventos)
 
 @app.route('/api/patients')
@@ -368,7 +396,7 @@ def reports():
         if appt.status in status_counts: status_counts[appt.status] += 1
     return render_template('reports.html', financial_appointments=financial_appointments, total_cobrado=total_cobrado_periodo, total_recebido=total_recebido_periodo, start_date=start_date.strftime('%Y-%m-%d'), end_date=end_date.strftime('%Y-%m-%d'), status_counts=status_counts)
 
-# ... (comandos init-db e main)
+# --- COMANDO PARA INICIALIZAR O BANCO DE DADOS ---
 @app.cli.command("init-db")
 def init_db_command():
     db.create_all()
