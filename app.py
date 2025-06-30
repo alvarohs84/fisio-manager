@@ -1,4 +1,4 @@
-# app.py (COMPLETO E COM CAMINHO ABSOLUTO PARA O BD)
+# app.py (COMPLETO E ATUALIZADO)
 
 import os
 import uuid
@@ -17,17 +17,10 @@ from collections import defaultdict
 # --- CONFIGURAÇÃO DA APLICAÇÃO ---
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY') or 'uma-chave-secreta-muito-segura-e-diferente-para-testes'
-
-# --- ALTERAÇÃO CRUCIAL AQUI ---
-# Define o caminho base do projeto
-basedir = os.path.abspath(os.path.dirname(__file__))
-# Pega a URL do Render, se existir, ou cria um caminho absoluto para o app.db local
-render_db_url = os.environ.get('DATABASE_URL')
-if render_db_url and render_db_url.startswith("postgres://"):
-    render_db_url = render_db_url.replace("postgres://", "postgresql://", 1)
-app.config['SQLALCHEMY_DATABASE_URI'] = render_db_url or 'sqlite:///' + os.path.join(basedir, 'app.db')
-# --- FIM DA ALTERAÇÃO ---
-
+db_url = os.environ.get('DATABASE_URL')
+if db_url and db_url.startswith("postgres://"):
+    db_url = db_url.replace("postgres://", "postgresql://", 1)
+app.config['SQLALCHEMY_DATABASE_URI'] = db_url or 'sqlite:///app.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # --- INICIALIZAÇÃO DAS EXTENSÕES ---
@@ -51,15 +44,8 @@ def load_user(user_id):
 def inject_global_variables():
     return {'current_year': datetime.utcnow().year, 'today': date.today()}
 
-@app.template_filter('datetimeformat')
-def format_datetime_filter(s, format='%d/%m/%Y'):
-    if isinstance(s, str):
-        try: s = datetime.strptime(s, '%Y-%m-%d').date()
-        except ValueError: return s
-    if hasattr(s, 'strftime'): return s.strftime(format)
-    return s
-
-# --- ROTAS DE AUTENTICAÇÃO ---
+# --- ROTAS DE AUTENTICAÇÃO E GESTÃO (sem alterações) ---
+# ... (todas as rotas desde /register até /assessment/<id> permanecem iguais)
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if current_user.is_authenticated: return redirect(url_for('dashboard'))
@@ -77,7 +63,6 @@ def register():
         return redirect(url_for('login'))
     return render_template('register.html', title='Registrar', form=form)
 
-# ... (O RESTO DO FICHEIRO CONTINUA EXATAMENTE IGUAL) ...
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated: return redirect(url_for('dashboard'))
@@ -227,6 +212,38 @@ def view_assessment(assessment_id):
     if assessment.patient.clinic_id != current_user.clinic_id: abort(403)
     return render_template('view_assessment.html', title='Detalhes da Avaliação', assessment=assessment)
 
+# --- APIS E ROTAS DE AGENDAMENTO ---
+# ... (a maioria das APIs permanece igual)
+
+# ROTA ADICIONADA: PARA SALVAR AS ALTERAÇÕES DO AGENDAMENTO
+@app.route('/api/appointment/<int:appointment_id>/update', methods=['POST'])
+@login_required
+def update_appointment(appointment_id):
+    appointment = db.session.query(Appointment).join(User).filter(
+        Appointment.id == appointment_id,
+        User.clinic_id == current_user.clinic_id
+    ).first_or_404()
+    
+    data = request.get_json()
+    try:
+        if 'start_time' in data and data['start_time']:
+            appointment.start_time = datetime.fromisoformat(data['start_time'].replace('Z', '+00:00'))
+        if 'location' in data:
+            appointment.location = data['location']
+        if 'session_price' in data:
+            appointment.session_price = float(data['session_price'] or 0.0)
+        if 'notes' in data:
+            appointment.notes = data['notes']
+            
+        db.session.commit()
+        return jsonify({'status': 'success', 'message': 'Agendamento atualizado com sucesso.'})
+    except Exception as e:
+        db.session.rollback()
+        app.logger.error(f"Erro ao atualizar agendamento: {e}")
+        return jsonify({'status': 'error', 'message': f'Ocorreu um erro interno: {e}'}), 500
+
+
+# ... (o resto das suas APIs e rotas, sem alterações)
 @app.route('/api/appointment/create_from_agenda', methods=['POST'])
 @login_required
 def create_from_agenda():
@@ -267,6 +284,20 @@ def create_from_agenda():
         app.logger.error(f"Erro ao criar agendamento: {e}")
         return jsonify({'status': 'error', 'message': f'Ocorreu um erro interno: {e}'}), 500
 
+@app.route('/api/appointment/<int:appointment_id>/update_financials', methods=['POST'])
+@login_required
+def update_financials(appointment_id):
+    appointment = db.session.query(Appointment).join(User).filter(Appointment.id == appointment_id, User.clinic_id == current_user.clinic_id).first_or_404()
+    data = request.get_json()
+    try:
+        appointment.session_price = float(data.get('session_price', 0.0) or 0.0)
+        appointment.amount_paid = float(data.get('amount_paid', 0.0) or 0.0)
+        appointment.payment_notes = data.get('payment_notes', '')
+        db.session.commit()
+        return jsonify({'status': 'success', 'message': 'Dados financeiros atualizados.'})
+    except (ValueError, TypeError):
+        return jsonify({'status': 'error', 'message': 'Valores inválidos. Use apenas números.'}), 400
+
 @app.route('/api/appointment/<int:appointment_id>/<action>', methods=['POST'])
 @login_required
 def handle_appointment_action(appointment_id, action):
@@ -284,20 +315,6 @@ def handle_appointment_action(appointment_id, action):
         return jsonify({'status': 'error', 'message': 'Ação inválida.'}), 400
     db.session.commit()
     return jsonify({'status': 'success', 'message': message})
-
-@app.route('/api/appointment/<int:appointment_id>/update_financials', methods=['POST'])
-@login_required
-def update_financials(appointment_id):
-    appointment = db.session.query(Appointment).join(User).filter(Appointment.id == appointment_id, User.clinic_id == current_user.clinic_id).first_or_404()
-    data = request.get_json()
-    try:
-        appointment.session_price = float(data.get('session_price', 0.0) or 0.0)
-        appointment.amount_paid = float(data.get('amount_paid', 0.0) or 0.0)
-        appointment.payment_notes = data.get('payment_notes', '')
-        db.session.commit()
-        return jsonify({'status': 'success', 'message': 'Dados financeiros atualizados.'})
-    except (ValueError, TypeError):
-        return jsonify({'status': 'error', 'message': 'Valores inválidos. Use apenas números.'}), 400
 
 @app.route('/api/patient/<int:patient_id>/financial_balance')
 @login_required
@@ -351,8 +368,7 @@ def reports():
         if appt.status in status_counts: status_counts[appt.status] += 1
     return render_template('reports.html', financial_appointments=financial_appointments, total_cobrado=total_cobrado_periodo, total_recebido=total_recebido_periodo, start_date=start_date.strftime('%Y-%m-%d'), end_date=end_date.strftime('%Y-%m-%d'), status_counts=status_counts)
 
-
-# --- COMANDO PARA INICIALIZAR O BANCO DE DADOS ---
+# ... (comandos init-db e main)
 @app.cli.command("init-db")
 def init_db_command():
     db.create_all()
