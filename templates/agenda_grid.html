@@ -2,25 +2,26 @@
 
 {% block styles %}
 <style>
-    /* ... (todos os estilos anteriores, sem alterações) ... */
+    /* Estilos para o ícone de pagamento no evento */
     .fc-event-main-frame { display: flex; align-items: center; }
     .payment-icon { margin-left: 8px; font-size: 0.9em; padding: 2px 5px; border-radius: 4px; color: white; }
-    .payment-balance-positive { background-color: #198754; }
-    .payment-balance-negative { background-color: #dc3545; }
-    .payment-balance-zero { background-color: #6c757d; }
+    .payment-balance-positive { background-color: #198754; } /* Verde para crédito */
+    .payment-balance-negative { background-color: #dc3545; } /* Vermelho para débito */
+    .payment-balance-zero { background-color: #6c757d; } /* Cinza para zerado */
     .fc-event.cancelled-event { background-color: #f8f9fa !important; border-color: #d3d3d3 !important; }
     .fc-event.cancelled-event .fc-event-title { text-decoration: line-through; color: #6c757d !important; }
-    .fc-event.completed-event .fc-event-title { font-weight: bold; }
+    .fc-event.completed-event { background-color: #d1e7dd !important; border-color: #a3cfbb !important; }
+    .fc-event.completed-event .fc-event-title { font-style: italic; color: #0f5132 !important;}
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="card">
+<div class="card shadow-sm">
     <div class="card-header"><h3>Agenda de Atendimentos</h3></div>
     <div class="card-body"><div id='calendar'></div></div>
 </div>
 
-<div class="modal fade" id="scheduleModal" tabindex="-1" aria-hidden="true">
+<div class="modal fade" id="scheduleModal" tabindex="-1" aria-labelledby="scheduleModalLabel" aria-hidden="true">
   <div class="modal-dialog">
     <div class="modal-content">
       <div class="modal-header"><h5 class="modal-title" id="scheduleModalLabel">Novo Agendamento</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
@@ -61,22 +62,36 @@
       <div class="modal-header"><h5 class="modal-title" id="viewEventModalLabel">Detalhes do Agendamento</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
       <div class="modal-body">
         <form id="editEventForm">
-            <h5 id="viewPatientName"></h5>
-            <fieldset id="general-fieldset" disabled>
-                <div class="row">
-                    <div class="col-md-7 mb-3"><label for="viewEventDateInput" class="form-label">Data e Hora</label><input type="datetime-local" class="form-control" id="viewEventDateInput"></div>
-                    <div class="col-md-5 mb-3"><label for="viewEventLocationInput" class="form-label">Local</label><input type="text" class="form-control" id="viewEventLocationInput"></div>
+            <div class="row">
+                <div class="col-md-7">
+                    <h5 id="viewPatientName"></h5>
+                    <p><strong>Status:</strong> <span class="badge" id="viewEventStatus"></span></p>
+                    <fieldset id="general-fieldset" disabled>
+                        <div class="row">
+                            <div class="col-md-7 mb-3"><label for="viewEventDateInput" class="form-label">Data e Hora</label><input type="datetime-local" class="form-control" id="viewEventDateInput"></div>
+                            <div class="col-md-5 mb-3"><label for="viewEventLocationInput" class="form-label">Local</label><input type="text" class="form-control" id="viewEventLocationInput"></div>
+                        </div>
+                        <div class="mb-3"><label for="viewEventNotes" class="form-label">Anotações Gerais</label><textarea class="form-control" id="viewEventNotes" rows="2"></textarea></div>
+                    </fieldset>
                 </div>
-                <div class="mb-3"><label for="viewEventNotes" class="form-label">Anotações Gerais</label><textarea class="form-control" id="viewEventNotes" rows="2"></textarea></div>
-            </fieldset>
+                <div class="col-md-5 border-start">
+                    <h6>Balanço Financeiro do Paciente</h6>
+                    <div id="patient-balance-details">
+                        <p class="mb-1">Total Cobrado: <span id="balanceTotalDue"></span></p>
+                        <p class="mb-1">Total Pago: <span id="balanceTotalPaid"></span></p>
+                        <hr class="my-2">
+                        <p class="fs-5 mb-0"><strong>Saldo: <span id="balanceTotalBalance"></span></strong></p>
+                    </div>
+                </div>
+            </div>
             <hr>
             <fieldset id="financialsFieldset">
                 <h6>Financeiro da Sessão</h6>
                 <div class="row">
-                    <div class="col-6 mb-3"><label for="viewEventPrice" class="form-label">Preço da Sessão (R$)</label><input type="number" class="form-control" id="viewEventPrice" step="0.01"></div>
-                    <div class="col-6 mb-3"><label for="viewAmountPaid" class="form-label">Valor Pago (R$)</label><input type="number" class="form-control" id="viewAmountPaid" step="0.01"></div>
+                    <div class="col-6 mb-3"><label for="viewEventPrice" class="form-label">Preço da Sessão (R$)</label><input type="number" class="form-control" id="viewEventPrice" step="0.01" disabled></div>
+                    <div class="col-6 mb-3"><label for="viewAmountPaid" class="form-label">Valor Pago (R$)</label><input type="number" class="form-control" id="viewAmountPaid" step="0.01" disabled></div>
                 </div>
-                <div class="mb-3"><label for="viewPaymentNotes" class="form-label">Anotações do Pagamento</label><textarea class="form-control" id="viewPaymentNotes" rows="2"></textarea></div>
+                <div class="mb-3"><label for="viewPaymentNotes" class="form-label">Anotações do Pagamento</label><textarea class="form-control" id="viewPaymentNotes" rows="2" disabled></textarea></div>
             </fieldset>
         </form>
       </div>
@@ -117,16 +132,13 @@ document.addEventListener('DOMContentLoaded', function() {
     const formatCurrency = (value) => `R$ ${(value || 0).toFixed(2).replace('.', ',')}`;
 
     function setViewMode(isEditMode, status) {
+        const isActionable = status === 'Agendado';
         document.getElementById('general-fieldset').disabled = !isEditMode;
         document.getElementById('financialsFieldset').disabled = !isEditMode;
-        
         document.getElementById('editAppointmentBtn').style.display = isEditMode ? 'none' : 'inline-block';
         document.getElementById('saveChangesBtn').style.display = isEditMode ? 'inline-block' : 'none';
-        
-        const isActionable = status === 'Agendado';
         document.getElementById('cancelAppointmentTriggerBtn').style.display = isEditMode ? 'none' : 'inline-block';
         document.getElementById('completeAppointmentBtn').style.display = isEditMode ? 'none' : 'inline-block';
-
         document.getElementById('editAppointmentBtn').disabled = !isActionable;
         document.getElementById('cancelAppointmentTriggerBtn').disabled = !isActionable;
         document.getElementById('completeAppointmentBtn').disabled = !isActionable;
@@ -134,6 +146,16 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function sendApiRequest(url, method = 'POST', data = {}) {
         return fetch(url, { method: method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+    }
+    
+    function fetchPatientBalance(patientId) {
+        fetch(`/api/patient/${patientId}/financial_balance`).then(res => res.json()).then(data => {
+            document.getElementById('balanceTotalDue').textContent = formatCurrency(data.total_due);
+            document.getElementById('balanceTotalPaid').textContent = formatCurrency(data.total_paid);
+            let balanceSpan = document.getElementById('balanceTotalBalance');
+            balanceSpan.textContent = formatCurrency(data.balance);
+            balanceSpan.className = data.balance < 0 ? 'text-danger' : 'text-success';
+        });
     }
 
     // --- CONFIGURAÇÃO DO CALENDÁRIO ---
@@ -143,14 +165,13 @@ document.addEventListener('DOMContentLoaded', function() {
         initialView: 'timeGridWeek',
         events: '/api/appointments',
         selectable: true,
-        
         eventClassNames: function(arg) {
             const props = arg.event.extendedProps;
             if (props.status === 'Cancelado') return ['cancelled-event'];
             if (props.status === 'Concluído') return ['completed-event'];
             return [];
         },
-
+        eventContent: function(arg) { /* ... (sem alterações) ... */ return { html: `<div class="fc-event-title">${arg.event.title}</div>` }; },
         dateClick: function(info) {
             document.getElementById('scheduleForm').reset();
             document.getElementById('recurrenceOptions').style.display = 'none';
@@ -162,13 +183,11 @@ document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('scheduleModalLabel').textContent = `Novo Agendamento`;
             fetch('/api/patients').then(res => res.json()).then(patients => {
                 let patientSelect = document.getElementById('patientSelect');
-                patientSelect.innerHTML = ''; 
-                patientSelect.appendChild(new Option('-- Selecione --', ''));
+                patientSelect.innerHTML = ''; patientSelect.appendChild(new Option('-- Selecione --', ''));
                 patients.forEach(p => patientSelect.appendChild(new Option(p.name, p.id)));
             });
             scheduleModal.show();
         },
-
         eventClick: function(info) {
             currentEventId = info.event.id;
             let props = info.event.extendedProps;
@@ -192,15 +211,14 @@ document.addEventListener('DOMContentLoaded', function() {
             if (props.status === 'Cancelado') statusBadge.classList.add('bg-secondary');
             else if (props.status === 'Concluído') statusBadge.classList.add('bg-success');
             else statusBadge.classList.add('bg-info');
-
+            
+            fetchPatientBalance(props.patient_id);
             viewEventModal.show();
         }
     });
     calendar.render();
 
-    // --- EVENT LISTENERS ---
-    
-    // Salvar NOVO Agendamento
+    // --- EVENT LISTENERS DOS BOTÕES ---
     document.getElementById('saveAppointmentBtn').addEventListener('click', function() {
         const dateValue = document.getElementById('dateInput').value;
         const timeValue = document.getElementById('timeInput').value;
@@ -224,7 +242,8 @@ document.addEventListener('DOMContentLoaded', function() {
             });
     });
 
-    // Salvar ALTERAÇÕES de um agendamento existente
+    document.getElementById('editAppointmentBtn').addEventListener('click', () => setViewMode(true, 'Agendado'));
+    
     document.getElementById('saveChangesBtn').addEventListener('click', function() {
         const appointmentData = {
             start_time: new Date(document.getElementById('viewEventDateInput').value).toISOString(),
@@ -242,19 +261,9 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    // Botões de Ação (Concluir, Cancelar, Apagar)
-    function setupActionListeners() {
-        document.getElementById('editAppointmentBtn').addEventListener('click', () => setViewMode(true));
-        document.getElementById('cancelAppointmentTriggerBtn').addEventListener('click', () => cancelConfirmationModal.show());
-        document.getElementById('confirmCancelBtn').addEventListener('click', () => performAction('cancel'));
-        document.getElementById('deleteAppointmentTriggerBtn').addEventListener('click', () => deleteConfirmationModal.show());
-        document.getElementById('confirmDeleteBtn').addEventListener('click', () => performAction('delete'));
-        document.getElementById('completeAppointmentBtn').addEventListener('click', () => performAction('complete'));
-    }
-
     function performAction(action) {
         if (!currentEventId) return;
-        sendApiRequest(`/api/appointment/${currentEventId}/${action}`)
+        sendApiRequest(`/api/appointment/${currentEventId}/${action}`, {})
             .then(res => res.json())
             .then(data => {
                 if (data.status === 'success') {
@@ -266,7 +275,11 @@ document.addEventListener('DOMContentLoaded', function() {
             });
     }
 
-    setupActionListeners();
+    document.getElementById('cancelAppointmentTriggerBtn').addEventListener('click', () => cancelConfirmationModal.show());
+    document.getElementById('confirmCancelBtn').addEventListener('click', () => performAction('cancel'));
+    document.getElementById('deleteAppointmentTriggerBtn').addEventListener('click', () => deleteConfirmationModal.show());
+    document.getElementById('confirmDeleteBtn').addEventListener('click', () => performAction('delete'));
+    document.getElementById('completeAppointmentBtn').addEventListener('click', () => performAction('complete'));
 });
 </script>
 {% endblock %}
