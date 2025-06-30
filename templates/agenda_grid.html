@@ -2,18 +2,14 @@
 
 {% block styles %}
 <style>
-    /* ... (todos os estilos anteriores, sem alterações) ... */
     .fc-event-main-frame { display: flex; align-items: center; }
     .payment-icon { margin-left: 8px; font-size: 0.9em; padding: 2px 5px; border-radius: 4px; color: white; }
     .payment-balance-positive { background-color: #198754; }
     .payment-balance-negative { background-color: #dc3545; }
     .payment-balance-zero { background-color: #6c757d; }
-    .loading-spinner { display: none; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 10; }
-    .modal-body.loading .loading-spinner { display: block; }
-    .modal-body.loading .modal-form-content { opacity: 0.5; pointer-events: none; }
     .fc-event.cancelled-event { background-color: #f8f9fa !important; border-color: #d3d3d3 !important; }
     .fc-event.cancelled-event .fc-event-title { text-decoration: line-through; color: #6c757d !important; }
-    .fc-event.completed-event .fc-event-title { font-weight: bold; } /* Opcional: Estilo para concluído */
+    .fc-event.completed-event .fc-event-title { font-weight: bold; }
 </style>
 {% endblock %}
 
@@ -23,12 +19,11 @@
     <div class="card-body"><div id='calendar'></div></div>
 </div>
 
-<div class="modal fade" id="scheduleModal" tabindex="-1" aria-labelledby="scheduleModalLabel" aria-hidden="true">
+<div class="modal fade" id="scheduleModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog">
     <div class="modal-content">
       <div class="modal-header"><h5 class="modal-title" id="scheduleModalLabel">Novo Agendamento</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
       <div class="modal-body">
-        <div class="modal-form-content">
             <form id="scheduleForm">
                 <input type="hidden" id="start_datetime">
                 <div class="mb-3"><label for="patientSelect" class="form-label">Paciente</label><select class="form-select" id="patientSelect" required></select></div>
@@ -39,30 +34,29 @@
                 <div class="form-check mb-3"><input class="form-check-input" type="checkbox" id="isRecurringCheck"><label class="form-check-label" for="isRecurringCheck">Repetir atendimento</label></div>
                 <div id="recurrenceOptions" class="border p-3 rounded mb-3" style="display: none;">
                     <div class="mb-3"><label class="form-label">Repetir nos dias:</label><div>
-                        <div class="form-check form-check-inline"><input class="form-check-input weekday-check" type="checkbox" value="1" id="checkMon"><label class="form-check-label" for="checkMon">Seg</label></div>
-                        <div class="form-check form-check-inline"><input class="form-check-input weekday-check" type="checkbox" value="2" id="checkTue"><label class="form-check-label" for="checkTue">Ter</label></div>
-                        <div class="form-check form-check-inline"><input class="form-check-input weekday-check" type="checkbox" value="3" id="checkWed"><label class="form-check-label" for="checkWed">Qua</label></div>
-                        <div class="form-check form-check-inline"><input class="form-check-input weekday-check" type="checkbox" value="4" id="checkThu"><label class="form-check-label" for="checkThu">Qui</label></div>
-                        <div class="form-check form-check-inline"><input class="form-check-input weekday-check" type="checkbox" value="5" id="checkFri"><label class="form-check-label" for="checkFri">Sex</label></div>
-                        <div class="form-check form-check-inline"><input class="form-check-input weekday-check" type="checkbox" value="6" id="checkSat"><label class="form-check-label" for="checkSat">Sáb</label></div>
+                        <div class="form-check form-check-inline"><input class="form-check-input weekday-check" type="checkbox" value="1" id="checkMon"><label for="checkMon">Seg</label></div>
+                        <div class="form-check form-check-inline"><input class="form-check-input weekday-check" type="checkbox" value="2" id="checkTue"><label for="checkTue">Ter</label></div>
+                        <div class="form-check form-check-inline"><input class="form-check-input weekday-check" type="checkbox" value="3" id="checkWed"><label for="checkWed">Qua</label></div>
+                        <div class="form-check form-check-inline"><input class="form-check-input weekday-check" type="checkbox" value="4" id="checkThu"><label for="checkThu">Qui</label></div>
+                        <div class="form-check form-check-inline"><input class="form-check-input weekday-check" type="checkbox" value="5" id="checkFri"><label for="checkFri">Sex</label></div>
+                        <div class="form-check form-check-inline"><input class="form-check-input weekday-check" type="checkbox" value="6" id="checkSat"><label for="checkSat">Sáb</label></div>
                     </div></div>
                     <div class="mb-3"><label for="weeksRepeatInput" class="form-label">Por quantas semanas?</label><input type="number" class="form-control" id="weeksRepeatInput" value="4" min="1"></div>
                 </div>
-                <div class="mb-3"><label for="notesTextarea" class="form-label">Anotações (Geral)</label><textarea class="form-control" id="notesTextarea" rows="2"></textarea></div>
+                <div class="mb-3"><label for="notesTextarea" class="form-label">Anotações</label><textarea class="form-control" id="notesTextarea" rows="2"></textarea></div>
             </form>
-        </div>
       </div>
-      <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button><button type="button" class="btn btn-primary" id="saveAppointmentBtn">Salvar</button></div>
+      <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button><button type="button" class="btn btn-primary" id="saveAppointmentBtn">Salvar</button></div>
     </div>
   </div>
 </div>
 
-<div class="modal fade" id="viewEventModal" tabindex="-1" aria-labelledby="viewEventModalLabel" aria-hidden="true">
+<div class="modal fade" id="viewEventModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-lg">
     <div class="modal-content">
       <div class="modal-header"><h5 class="modal-title" id="viewEventModalLabel">Detalhes do Agendamento</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
       <div class="modal-body">
-          <div class="row">
+           <div class="row">
               <div class="col-md-7">
                   <h5 id="viewPatientName"></h5>
                   <p><i class="bi bi-calendar-event"></i> <span id="viewEventDate"></span></p>
@@ -218,7 +212,7 @@ document.addEventListener('DOMContentLoaded', function() {
     calendar.render();
 
     // --- FUNÇÕES AUXILIARES ---
-    function fetchPatientBalance(patientId) { /* ... (sem alterações) ... */ 
+    function fetchPatientBalance(patientId) {
         fetch(`/api/patient/${patientId}/financial_balance`).then(res => res.json()).then(data => {
             document.getElementById('balanceTotalDue').textContent = formatCurrency(data.total_due);
             document.getElementById('balanceTotalPaid').textContent = formatCurrency(data.total_paid);
@@ -242,8 +236,6 @@ document.addEventListener('DOMContentLoaded', function() {
         const financialData = { session_price: document.getElementById('viewEventPrice').value, amount_paid: document.getElementById('viewAmountPaid').value, payment_notes: document.getElementById('viewPaymentNotes').value };
         sendApiRequest(`/api/appointment/${currentEventId}/update_financials`, financialData).then(res => res.json()).then(data => { if (data.status === 'success') { viewEventModal.hide(); calendar.refetchEvents(); } else { alert(`Erro: ${data.message}`); } });
     });
-
-    // LÓGICA DE CANCELAR
     document.getElementById('cancelAppointmentTriggerBtn').addEventListener('click', function() { cancelConfirmationModal.show(); });
     document.getElementById('confirmCancelBtn').addEventListener('click', function() {
         sendApiRequest(`/api/appointment/${currentEventId}/cancel`, {}).then(res => res.json()).then(data => {
@@ -251,8 +243,6 @@ document.addEventListener('DOMContentLoaded', function() {
             else { alert(`Erro: ${data.message}`); }
         });
     });
-
-    // LÓGICA DE APAGAR
     document.getElementById('deleteAppointmentTriggerBtn').addEventListener('click', function() { deleteConfirmationModal.show(); });
     document.getElementById('confirmDeleteBtn').addEventListener('click', function() {
         sendApiRequest(`/api/appointment/${currentEventId}/delete`, {}).then(res => res.json()).then(data => {
@@ -260,16 +250,10 @@ document.addEventListener('DOMContentLoaded', function() {
             else { alert(`Erro: ${data.message}`); }
         });
     });
-
-    // --- NOVA LÓGICA PARA CONCLUIR ---
     document.getElementById('completeAppointmentBtn').addEventListener('click', function() {
         sendApiRequest(`/api/appointment/${currentEventId}/complete`, {}).then(res => res.json()).then(data => {
-            if (data.status === 'success') {
-                viewEventModal.hide();
-                calendar.refetchEvents();
-            } else {
-                alert(`Erro ao concluir: ${data.message}`);
-            }
+            if (data.status === 'success') { viewEventModal.hide(); calendar.refetchEvents(); } 
+            else { alert(`Erro: ${data.message}`); }
         });
     });
 });
