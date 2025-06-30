@@ -1,6 +1,7 @@
-# app.py (COMPLETO E ATUALIZADO)
+# app.py (COMPLETO E FINAL COM SUBSCRIÇÕES MERCADO PAGO)
 
 import os
+from dotenv import load_dotenv
 import uuid
 from flask import Flask, render_template, redirect, url_for, flash, jsonify, request, abort
 from flask_sqlalchemy import SQLAlchemy
@@ -13,19 +14,25 @@ import cloudinary.uploader
 import cloudinary.api
 from sqlalchemy import func, extract
 from collections import defaultdict
+import mercadopago
+from functools import wraps
+
+load_dotenv() # Carrega as variáveis do ficheiro .env para o ambiente
 
 # --- CONFIGURAÇÃO DA APLICAÇÃO ---
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY') or 'uma-chave-secreta-muito-segura-e-diferente-para-testes'
-
-# Define o caminho base do projeto
 basedir = os.path.abspath(os.path.dirname(__file__))
-# Pega a URL do Render, se existir, ou cria um caminho absoluto para o app.db local
 render_db_url = os.environ.get('DATABASE_URL')
 if render_db_url and render_db_url.startswith("postgres://"):
     render_db_url = render_db_url.replace("postgres://", "postgresql://", 1)
 app.config['SQLALCHEMY_DATABASE_URI'] = render_db_url or 'sqlite:///' + os.path.join(basedir, 'app.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+# --- IDS DOS PLANOS DO MERCADO PAGO ---
+app.config['MERCADO_PAGO_PLANO_MENSAL_ID'] = os.environ.get('MP_PLANO_MENSAL_ID')
+app.config['MERCADO_PAGO_PLANO_ANUAL_ID'] = os.environ.get('MP_PLANO_ANUAL_ID')
+
 
 # --- INICIALIZAÇÃO DAS EXTENSÕES ---
 from models import db, User, Patient, Appointment, ElectronicRecord, Assessment, UploadedFile, Clinic
@@ -34,10 +41,11 @@ migrate = Migrate(app, db)
 bcrypt = Bcrypt(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
-login_manager.login_message = 'Por favor, faça o login para acessar esta página.'
+login_manager.login_message = 'Por favor, faça o login para aceder a esta página.'
 login_manager.login_message_category = 'info'
 
-# --- CONFIGURAÇÃO DO CLOUDINARY ---
+# --- CONFIGURAÇÃO DOS SDKs ---
+mp_sdk = mercadopago.SDK(os.environ.get("MERCADO_PAGO_ACCESS_TOKEN"))
 cloudinary.config(cloud_name=os.environ.get('CLOUDINARY_CLOUD_NAME'), api_key=os.environ.get('CLOUDINARY_API_KEY'), api_secret=os.environ.get('CLOUDINARY_API_SECRET'), secure=True)
 
 @login_manager.user_loader
@@ -56,6 +64,70 @@ def format_datetime_filter(s, format='%d/%m/%Y'):
     if hasattr(s, 'strftime'): return s.strftime(format)
     return s
 
+# --- DECORADOR PARA VERIFICAR SUBSCRIÇÃO ATIVA ---
+def subscription_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not current_user.is_authenticated or current_user.clinic.subscription_status != 'active':
+            flash('A sua subscrição não está ativa. Por favor, escolha um plano para continuar.', 'warning')
+            return redirect(url_for('pricing'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+# --- ROTAS DE PAGAMENTO E SUBSCRIÇÃO ---
+@app.route('/pricing')
+@login_required
+def pricing():
+    return render_template('pricing.html', title="Planos e Preços")
+
+@app.route('/create-subscription/<plan_type>')
+@login_required
+def create_subscription(plan_type):
+    if plan_type == 'mensal':
+        plan_id = app.config['MERCADO_PAGO_PLANO_MENSAL_ID']
+    elif plan_type == 'anual':
+        plan_id = app.config['MERCADO_PAGO_PLANO_ANUAL_ID']
+    else:
+        abort(404)
+    subscription_data = {"preapproval_plan_id": plan_id, "reason": f"Assinatura FisioManager - Plano {plan_type.capitalize()}", "payer_email": current_user.email, "back_url": url_for('dashboard', _external=True)}
+    try:
+        result = mp_sdk.preapproval().create(subscription_data)
+        if result["status"] == 201:
+            current_user.clinic.mp_subscription_id = result["response"]["id"]
+            db.session.commit()
+            payment_link = result["response"]["init_point"]
+            return redirect(payment_link)
+        else:
+            flash(f"Erro ao criar subscrição no Mercado Pago: {result.get('message', 'Erro desconhecido')}", 'danger')
+            return redirect(url_for('pricing'))
+    except Exception as e:
+        app.logger.error(f"Erro na API do Mercado Pago: {e}")
+        flash("Ocorreu um erro ao comunicar com o sistema de pagamentos. Tente novamente.", 'danger')
+        return redirect(url_for('pricing'))
+
+@app.route('/mercadopago-webhook', methods=['POST'])
+def mercadopago_webhook():
+    data = request.get_json()
+    if data and data.get("type") == "preapproval":
+        subscription_id = data.get("data", {}).get("id")
+        if subscription_id:
+            try:
+                subscription_details = mp_sdk.preapproval().get(subscription_id)
+                if subscription_details["status"] == 200:
+                    response = subscription_details["response"]
+                    clinic = Clinic.query.filter_by(mp_subscription_id=subscription_id).first()
+                    if clinic:
+                        new_status = response.get("status")
+                        if new_status == "authorized":
+                            clinic.subscription_status = "active"
+                        else:
+                            clinic.subscription_status = "inactive"
+                        db.session.commit()
+            except Exception as e:
+                app.logger.error(f"Erro ao processar webhook do MP: {e}")
+                return "Erro no processamento", 500
+    return "OK", 200
+
 # --- ROTAS DE AUTENTICAÇÃO ---
 @app.route('/register', methods=['GET', 'POST'])
 def register():
@@ -63,15 +135,16 @@ def register():
     from forms import RegistrationForm
     form = RegistrationForm()
     if form.validate_on_submit():
-        new_clinic = Clinic(name=f"Clínica de {form.name.data}")
+        new_clinic = Clinic(name=f"Clínica de {form.name.data}", subscription_status='inactive')
         db.session.add(new_clinic)
         db.session.commit()
         user = User(name=form.name.data, email=form.email.data, clinic_id=new_clinic.id)
         user.set_password(form.password.data)
         db.session.add(user)
         db.session.commit()
-        flash('Sua conta e sua clínica foram criadas com sucesso! Faça o login.', 'success')
-        return redirect(url_for('login'))
+        flash('Sua conta e sua clínica foram criadas com sucesso! Escolha um plano para começar.', 'success')
+        login_user(user)
+        return redirect(url_for('pricing'))
     return render_template('register.html', title='Registrar', form=form)
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -86,7 +159,7 @@ def login():
             next_page = request.args.get('next')
             return redirect(next_page) if next_page else redirect(url_for('dashboard'))
         else:
-            flash('Login sem sucesso. Verifique seu email e senha.', 'danger')
+            flash('Login sem sucesso. Verifique o seu email e senha.', 'danger')
     return render_template('login.html', title='Login', form=form)
 
 @app.route('/logout')
@@ -94,13 +167,14 @@ def logout():
     logout_user()
     return redirect(url_for('index'))
 
+# --- ROTAS PRINCIPAIS E DE GESTÃO ---
 @app.route('/')
 def index():
     return render_template('index.html')
 
-# --- ROTAS PRINCIPAIS E DE GESTÃO ---
 @app.route('/dashboard')
 @login_required
+@subscription_required
 def dashboard():
     hoje = datetime.utcnow()
     proximos_agendamentos = Appointment.query.join(User).filter(User.clinic_id == current_user.clinic_id, Appointment.start_time >= hoje).order_by(Appointment.start_time.asc()).limit(5).all()
@@ -110,11 +184,13 @@ def dashboard():
 
 @app.route('/agenda')
 @login_required
+@subscription_required
 def agenda():
     return render_template('agenda_grid.html')
 
 @app.route('/patients')
 @login_required
+@subscription_required
 def list_patients():
     page = request.args.get('page', 1, type=int)
     search_query = request.args.get('q', '')
@@ -132,6 +208,7 @@ def list_patients():
 
 @app.route('/patient/add', methods=['GET', 'POST'])
 @login_required
+@subscription_required
 def add_patient():
     from forms import PatientForm
     form = PatientForm()
@@ -145,6 +222,7 @@ def add_patient():
 
 @app.route('/patient/<int:patient_id>/edit', methods=['GET', 'POST'])
 @login_required
+@subscription_required
 def edit_patient(patient_id):
     patient = Patient.query.get_or_404(patient_id)
     if patient.clinic_id != current_user.clinic_id: abort(403)
@@ -163,6 +241,7 @@ def edit_patient(patient_id):
 
 @app.route('/patient/<int:patient_id>/delete', methods=['POST'])
 @login_required
+@subscription_required
 def delete_patient(patient_id):
     patient = Patient.query.get_or_404(patient_id)
     if patient.clinic_id != current_user.clinic_id: abort(403)
@@ -173,6 +252,7 @@ def delete_patient(patient_id):
 
 @app.route('/patient/<int:patient_id>')
 @login_required
+@subscription_required
 def patient_detail(patient_id):
     patient = Patient.query.get_or_404(patient_id)
     if patient.clinic_id != current_user.clinic_id: abort(403)
@@ -182,6 +262,7 @@ def patient_detail(patient_id):
 
 @app.route('/patient/<int:patient_id>/add_record', methods=['GET', 'POST'])
 @login_required
+@subscription_required
 def add_record(patient_id):
     patient = Patient.query.get_or_404(patient_id)
     if patient.clinic_id != current_user.clinic_id: abort(403)
@@ -197,6 +278,7 @@ def add_record(patient_id):
 
 @app.route('/patient/<int:patient_id>/add_assessment', methods=['GET', 'POST'])
 @login_required
+@subscription_required
 def add_assessment(patient_id):
     patient = Patient.query.get_or_404(patient_id)
     if patient.clinic_id != current_user.clinic_id: abort(403)
@@ -219,160 +301,15 @@ def add_assessment(patient_id):
 
 @app.route('/assessment/<int:assessment_id>')
 @login_required
+@subscription_required
 def view_assessment(assessment_id):
     assessment = Assessment.query.get_or_404(assessment_id)
     if assessment.patient.clinic_id != current_user.clinic_id: abort(403)
     return render_template('view_assessment.html', title='Detalhes da Avaliação', assessment=assessment)
 
-# --- APIS E ROTAS DE AGENDAMENTO ---
-@app.route('/api/appointment/create_from_agenda', methods=['POST'])
-@login_required
-def create_from_agenda():
-    data = request.get_json()
-    try:
-        patient_id = data['patient_id']
-        patient = Patient.query.filter_by(id=patient_id, clinic_id=current_user.clinic_id).first_or_404()
-        start_datetime_str = data['start_datetime']
-        location = data.get('location', 'Clínica')
-        session_price = data.get('session_price')
-        notes = data.get('notes', '')
-        is_recurring = data.get('is_recurring', False)
-        start_datetime = datetime.fromisoformat(start_datetime_str.replace('Z', '+00:00'))
-        price_float = float(session_price) if session_price else None
-        def create_single_appointment(appt_time, rec_id=None):
-            new_appt = Appointment(start_time=appt_time, location=location, notes=notes, session_price=price_float, amount_paid=0.0, is_recurring=is_recurring, recurrence_id=rec_id, professional=current_user, patient_id=patient.id)
-            db.session.add(new_appt)
-        if not is_recurring:
-            create_single_appointment(start_datetime)
-        else:
-            weeks_to_repeat = int(data.get('weeks_to_repeat', 1))
-            weekdays = [int(d) for d in data.get('weekdays', [])]
-            if not weekdays: return jsonify({'status': 'error', 'message': 'Selecione os dias da semana.'}), 400
-            recurrence_id = str(uuid.uuid4())
-            start_date_of_series = start_datetime.date()
-            for i in range(weeks_to_repeat):
-                for weekday in weekdays:
-                    current_week_start_date = start_date_of_series + timedelta(weeks=i)
-                    days_ahead = weekday - current_week_start_date.weekday()
-                    target_date = current_week_start_date + timedelta(days=days_ahead)
-                    if target_date >= start_date_of_series:
-                        recurrent_start_time = datetime.combine(target_date, start_datetime.time())
-                        create_single_appointment(recurrent_start_time, rec_id=recurrence_id)
-        db.session.commit()
-        return jsonify({'status': 'success', 'message': 'Agendamento(s) criado(s) com sucesso!'})
-    except Exception as e:
-        db.session.rollback()
-        app.logger.error(f"Erro ao criar agendamento: {e}")
-        return jsonify({'status': 'error', 'message': f'Ocorreu um erro interno: {e}'}), 500
-
-@app.route('/api/appointment/<int:appointment_id>/update', methods=['POST'])
-@login_required
-def update_appointment(appointment_id):
-    appointment = db.session.query(Appointment).join(User).filter(Appointment.id == appointment_id, User.clinic_id == current_user.clinic_id).first_or_404()
-    data = request.get_json()
-    try:
-        if 'start_time' in data and data['start_time']:
-            appointment.start_time = datetime.fromisoformat(data['start_time'].replace('Z', '+00:00'))
-        if 'location' in data: appointment.location = data['location']
-        if 'notes' in data: appointment.notes = data['notes']
-        if 'session_price' in data: appointment.session_price = float(data.get('session_price', 0.0) or 0.0)
-        if 'amount_paid' in data: appointment.amount_paid = float(data.get('amount_paid', 0.0) or 0.0)
-        if 'payment_notes' in data: appointment.payment_notes = data.get('payment_notes', '')
-        db.session.commit()
-        return jsonify({'status': 'success', 'message': 'Agendamento atualizado com sucesso.'})
-    except Exception as e:
-        db.session.rollback()
-        app.logger.error(f"Erro ao atualizar agendamento: {e}")
-        return jsonify({'status': 'error', 'message': f'Ocorreu um erro interno: {e}'}), 500
-
-@app.route('/api/appointment/<int:appointment_id>/<action>', methods=['POST'])
-@login_required
-def handle_appointment_action(appointment_id, action):
-    appointment = db.session.query(Appointment).join(User).filter(Appointment.id == appointment_id, User.clinic_id == current_user.clinic_id).first_or_404()
-    if action == 'complete':
-        appointment.status = 'Concluído'
-        message = 'Agendamento marcado como concluído.'
-    elif action == 'cancel':
-        appointment.status = 'Cancelado'
-        message = 'Agendamento cancelado com sucesso.'
-    elif action == 'delete':
-        db.session.delete(appointment)
-        message = 'Agendamento apagado permanentemente.'
-    else:
-        return jsonify({'status': 'error', 'message': 'Ação inválida.'}), 400
-    db.session.commit()
-    return jsonify({'status': 'success', 'message': message})
-
-# ROTA ADICIONADA: PARA CANCELAR UMA SÉRIE DE AGENDAMENTOS RECORRENTES
-@app.route('/api/appointments/cancel_series', methods=['POST'])
-@login_required
-def cancel_recurring_series():
-    data = request.get_json()
-    recurrence_id = data.get('recurrence_id')
-    if not recurrence_id:
-        return jsonify({'status': 'error', 'message': 'ID de recorrência não fornecido.'}), 400
-
-    now = datetime.utcnow()
-    appointments_to_cancel = db.session.query(Appointment).join(User).filter(
-        User.clinic_id == current_user.clinic_id,
-        Appointment.recurrence_id == recurrence_id,
-        Appointment.start_time >= now
-    ).all()
-
-    if not appointments_to_cancel:
-        return jsonify({'status': 'error', 'message': 'Nenhum agendamento futuro encontrado para esta série.'}), 404
-
-    for appt in appointments_to_cancel:
-        appt.status = 'Cancelado'
-    
-    db.session.commit()
-    return jsonify({'status': 'success', 'message': f'{len(appointments_to_cancel)} agendamentos futuros foram cancelados.'})
-
-@app.route('/api/patient/<int:patient_id>/financial_balance')
-@login_required
-def financial_balance(patient_id):
-    patient = Patient.query.filter_by(id=patient_id, clinic_id=current_user.clinic_id).first_or_404()
-    total_due_query = db.session.query(func.sum(Appointment.session_price)).filter_by(patient_id=patient_id).scalar()
-    total_paid_query = db.session.query(func.sum(Appointment.amount_paid)).filter_by(patient_id=patient_id).scalar()
-    total_due = total_due_query or 0.0
-    total_paid = total_paid_query or 0.0
-    balance = total_paid - total_due
-    return jsonify({'total_due': total_due, 'total_paid': total_paid, 'balance': balance})
-
-@app.route('/api/appointments')
-@login_required
-def api_appointments():
-    appointments = db.session.query(Appointment).join(User).filter(User.clinic_id == current_user.clinic_id).all()
-    status_colors = {'Concluído': '#198754', 'Agendado': '#0dcaf0', 'Cancelado': '#6c757d'}
-    eventos = []
-    for appt in appointments:
-        eventos.append({
-            'id': appt.id, 
-            'title': appt.patient.full_name, 
-            'start': appt.start_time.isoformat(), 
-            'color': status_colors.get(appt.status, '#6c757d'), 
-            'borderColor': status_colors.get(appt.status, '#6c757d'), 
-            'extendedProps': {
-                'location': appt.location, 
-                'status': appt.status, 
-                'notes': appt.notes, 
-                'session_price': appt.session_price, 
-                'amount_paid': appt.amount_paid, 
-                'payment_notes': appt.payment_notes, 
-                'patient_id': appt.patient_id,
-                'recurrence_id': appt.recurrence_id # Passa o ID da recorrência para o frontend
-            }
-        })
-    return jsonify(eventos)
-
-@app.route('/api/patients')
-@login_required
-def api_patients():
-    patients = Patient.query.filter_by(clinic_id=current_user.clinic_id).order_by(Patient.full_name).all()
-    return jsonify([{'id': p.id, 'name': p.full_name} for p in patients])
-
 @app.route('/reports')
 @login_required
+@subscription_required
 def reports():
     hoje = date.today()
     start_date_str = request.args.get('start_date')
@@ -395,6 +332,54 @@ def reports():
     for appt in appointments_this_month:
         if appt.status in status_counts: status_counts[appt.status] += 1
     return render_template('reports.html', financial_appointments=financial_appointments, total_cobrado=total_cobrado_periodo, total_recebido=total_recebido_periodo, start_date=start_date.strftime('%Y-%m-%d'), end_date=end_date.strftime('%Y-%m-%d'), status_counts=status_counts)
+
+
+# --- APIS ---
+@app.route('/api/appointments')
+@login_required
+@subscription_required
+def api_appointments():
+    appointments = db.session.query(Appointment).join(User).filter(User.clinic_id == current_user.clinic_id).all()
+    status_colors = {'Concluído': '#198754', 'Agendado': '#0dcaf0', 'Cancelado': '#6c757d'}
+    eventos = []
+    for appt in appointments:
+        eventos.append({'id': appt.id, 'title': appt.patient.full_name, 'start': appt.start_time.isoformat(), 'color': status_colors.get(appt.status, '#6c757d'), 'borderColor': status_colors.get(appt.status, '#6c757d'), 'extendedProps': {'location': appt.location, 'status': appt.status, 'notes': appt.notes, 'session_price': appt.session_price, 'amount_paid': appt.amount_paid, 'payment_notes': appt.payment_notes, 'patient_id': appt.patient_id, 'recurrence_id': appt.recurrence_id}})
+    return jsonify(eventos)
+
+@app.route('/api/patients')
+@login_required
+def api_patients():
+    patients = Patient.query.filter_by(clinic_id=current_user.clinic_id).order_by(Patient.full_name).all()
+    return jsonify([{'id': p.id, 'name': p.full_name} for p in patients])
+
+@app.route('/api/appointment/<int:appointment_id>/<action>', methods=['POST'])
+@login_required
+def handle_appointment_action(appointment_id, action):
+    appointment = db.session.query(Appointment).join(User).filter(Appointment.id == appointment_id, User.clinic_id == current_user.clinic_id).first_or_404()
+    if action == 'complete': appointment.status = 'Concluído'; message = 'Agendamento marcado como concluído.'
+    elif action == 'cancel': appointment.status = 'Cancelado'; message = 'Agendamento cancelado com sucesso.'
+    elif action == 'delete': db.session.delete(appointment); message = 'Agendamento apagado permanentemente.'
+    else: return jsonify({'status': 'error', 'message': 'Ação inválida.'}), 400
+    db.session.commit()
+    return jsonify({'status': 'success', 'message': message})
+
+@app.route('/api/appointment/<int:appointment_id>/update', methods=['POST'])
+@login_required
+def update_appointment(appointment_id):
+    appointment = db.session.query(Appointment).join(User).filter(Appointment.id == appointment_id, User.clinic_id == current_user.clinic_id).first_or_404()
+    data = request.get_json()
+    try:
+        if 'start_time' in data and data['start_time']: appointment.start_time = datetime.fromisoformat(data['start_time'].replace('Z', '+00:00'))
+        if 'location' in data: appointment.location = data['location']
+        if 'notes' in data: appointment.notes = data['notes']
+        if 'session_price' in data: appointment.session_price = float(data.get('session_price', 0.0) or 0.0)
+        if 'amount_paid' in data: appointment.amount_paid = float(data.get('amount_paid', 0.0) or 0.0)
+        if 'payment_notes' in data: appointment.payment_notes = data.get('payment_notes', '')
+        db.session.commit()
+        return jsonify({'status': 'success', 'message': 'Agendamento atualizado com sucesso.'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'status': 'error', 'message': f'Ocorreu um erro interno: {e}'}), 500
 
 # --- COMANDO PARA INICIALIZAR O BANCO DE DADOS ---
 @app.cli.command("init-db")

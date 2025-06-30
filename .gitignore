@@ -11,3 +11,6 @@ __pycache__/
 # Arquivos de IDEs
 .vscode/
 .idea/
+
+# Ignorar ficheiro de variáveis de ambiente locais
+.env
