@@ -44,7 +44,20 @@ def load_user(user_id):
 def inject_global_variables():
     return {'current_year': datetime.utcnow().year, 'today': date.today()}
 
+# ADICIONANDO O FILTRO CUSTOMIZADO PARA DATAS NO TEMPLATE
+@app.template_filter('datetimeformat')
+def format_datetime_filter(s, format='%d/%m/%Y'):
+    if isinstance(s, str):
+        try:
+            s = datetime.strptime(s, '%Y-%m-%d').date()
+        except ValueError:
+            return s
+    if hasattr(s, 'strftime'):
+        return s.strftime(format)
+    return s
+
 # --- ROTAS DE AUTENTICAÇÃO ---
+# ... (o resto do ficheiro continua exatamente igual) ...
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if current_user.is_authenticated: return redirect(url_for('dashboard'))
@@ -79,7 +92,6 @@ def logout():
     logout_user()
     return redirect(url_for('index'))
 
-# --- ROTAS PRINCIPAIS E DE VISUALIZAÇÃO ---
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -98,7 +110,6 @@ def dashboard():
 def agenda():
     return render_template('agenda_grid.html')
 
-# --- ROTAS PARA PACIENTES ---
 @app.route('/patients')
 @login_required
 def list_patients():
@@ -214,7 +225,7 @@ def view_assessment(assessment_id):
         return redirect(url_for('list_patients'))
     return render_template('view_assessment.html', title='Detalhes da Avaliação', assessment=assessment)
 
-# --- APIS E ROTAS DE AGENDAMENTO ---
+# ... (APIs de agendamento, sem alterações)
 @app.route('/api/appointment/create_from_agenda', methods=['POST'])
 @login_required
 def create_from_agenda():
@@ -328,27 +339,46 @@ def api_patients():
     patients = Patient.query.filter_by(user_id=current_user.id).order_by(Patient.full_name).all()
     return jsonify([{'id': p.id, 'name': p.full_name} for p in patients])
 
-# --- ROTA DE RELATÓRIOS ---
+# ROTA DE RELATÓRIOS (ATUALIZADA)
 @app.route('/reports')
 @login_required
 def reports():
     hoje = date.today()
-    start_of_month = hoje.replace(day=1)
-    appointments_this_month = Appointment.query.filter(Appointment.user_id == current_user.id, Appointment.start_time >= start_of_month).all()
+    start_date_str = request.args.get('start_date')
+    end_date_str = request.args.get('end_date')
+
+    if start_date_str and end_date_str:
+        start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+        end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+    else:
+        start_date = hoje.replace(day=1)
+        next_month = start_date.replace(day=28) + timedelta(days=4)
+        end_date = next_month - timedelta(days=next_month.day)
+
+    start_datetime = datetime.combine(start_date, time.min)
+    end_datetime = datetime.combine(end_date, time.max)
+    
+    financial_appointments = Appointment.query.filter(Appointment.user_id == current_user.id, Appointment.start_time.between(start_datetime, end_datetime)).order_by(Appointment.start_time.desc()).all()
+    total_cobrado_periodo = sum(appt.session_price for appt in financial_appointments if appt.session_price)
+    total_recebido_periodo = sum(appt.amount_paid for appt in financial_appointments if appt.amount_paid)
+    
+    start_of_current_month = hoje.replace(day=1)
+    appointments_this_month = Appointment.query.filter(Appointment.user_id == current_user.id, Appointment.start_time >= start_of_current_month).all()
     status_counts = {'Concluído': 0, 'Agendado': 0, 'Cancelado': 0}
     for appt in appointments_this_month:
         if appt.status in status_counts: status_counts[appt.status] += 1
-    total_recebido_mes = db.session.query(func.sum(Appointment.amount_paid)).filter(Appointment.user_id == current_user.id, Appointment.start_time >= start_of_month).scalar() or 0.0
-    results = db.session.query(Patient.full_name, func.to_char(Appointment.start_time, 'YYYY-MM').label('month'), func.count(Appointment.id).label('session_count')).join(Appointment).filter(Appointment.user_id == current_user.id, Appointment.start_time >= (hoje - timedelta(days=365))).group_by(Patient.full_name, 'month').order_by(Patient.full_name, 'month').all()
-    patient_monthly_data = defaultdict(dict)
-    all_months = set()
-    for name, month, count in results:
-        patient_monthly_data[name][month] = count
-        all_months.add(month)
-    sorted_months = sorted(list(all_months))
-    return render_template('reports.html', status_counts=status_counts, total_recebido_mes=total_recebido_mes, patient_monthly_data=patient_monthly_data, sorted_months=sorted_months)
+        
+    return render_template(
+        'reports.html', 
+        status_counts=status_counts, 
+        financial_appointments=financial_appointments,
+        total_cobrado=total_cobrado_periodo,
+        total_recebido=total_recebido_periodo,
+        start_date=start_date.strftime('%Y-%m-%d'),
+        end_date=end_date.strftime('%Y-%m-%d')
+    )
 
-# --- COMANDO PARA INICIALIZAR O BANCO DE DADOS ---
+# ... (comandos init-db e main)
 @app.cli.command("init-db")
 def init_db_command():
     db.create_all()
