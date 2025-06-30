@@ -13,6 +13,7 @@ import cloudinary.uploader
 import cloudinary.api
 from sqlalchemy import func, extract
 from collections import defaultdict
+from markupsafe import Markup
 
 # --- CONFIGURAÇÃO DA APLICAÇÃO ---
 app = Flask(__name__)
@@ -43,6 +44,18 @@ def load_user(user_id):
 @app.context_processor
 def inject_global_variables():
     return {'current_year': datetime.utcnow().year, 'today': date.today()}
+
+@app.template_filter('datetimeformat')
+def format_datetime_filter(s, format='%d/%m/%Y'):
+    if isinstance(s, str):
+        try:
+            s = datetime.strptime(s, '%Y-%m-%d').date()
+        except ValueError:
+            return s # Retorna a string original se não conseguir converter
+    if hasattr(s, 'strftime'):
+        return s.strftime(format)
+    return s
+
 
 # --- ROTAS DE AUTENTICAÇÃO ---
 # ... (sem alterações aqui)
@@ -171,6 +184,7 @@ def patient_detail(patient_id):
     assessments = patient.assessments.order_by(Assessment.created_at.desc()).all()
     return render_template('patient_detail.html', patient=patient, records=records, assessments=assessments)
 
+# ... (rotas de prontuário e avaliação, sem alterações)
 @app.route('/patient/<int:patient_id>/add_record', methods=['GET', 'POST'])
 @login_required
 def add_record(patient_id):
@@ -217,8 +231,8 @@ def view_assessment(assessment_id):
         return redirect(url_for('list_patients'))
     return render_template('view_assessment.html', title='Detalhes da Avaliação', assessment=assessment)
 
-
 # --- APIS E ROTAS DE AGENDAMENTO ---
+# ... (sem alterações aqui, exceto a rota reports no final)
 @app.route('/api/appointment/create_from_agenda', methods=['POST'])
 @login_required
 def create_from_agenda():
@@ -295,18 +309,14 @@ def delete_appointment(appointment_id):
     db.session.commit()
     return jsonify({'status': 'success', 'message': 'Agendamento apagado permanentemente.'})
 
-# ROTA ADICIONADA: PARA CONCLUIR UM AGENDAMENTO
 @app.route('/api/appointment/<int:appointment_id>/complete', methods=['POST'])
 @login_required
 def complete_appointment(appointment_id):
     appointment = Appointment.query.get_or_404(appointment_id)
-    if appointment.user_id != current_user.id:
-        return jsonify({'status': 'error', 'message': 'Não autorizado'}), 403
-    
+    if appointment.user_id != current_user.id: return jsonify({'status': 'error', 'message': 'Não autorizado'}), 403
     appointment.status = 'Concluído'
     db.session.commit()
     return jsonify({'status': 'success', 'message': 'Agendamento marcado como concluído.'})
-
 
 @app.route('/api/patient/<int:patient_id>/financial_balance')
 @login_required
@@ -327,22 +337,7 @@ def api_appointments():
     status_colors = {'Concluído': '#198754', 'Agendado': '#0dcaf0', 'Cancelado': '#6c757d'}
     eventos = []
     for appt in appointments:
-        eventos.append({
-            'id': appt.id,
-            'title': appt.patient.full_name,
-            'start': appt.start_time.isoformat(),
-            'color': status_colors.get(appt.status, '#6c757d'),
-            'borderColor': status_colors.get(appt.status, '#6c757d'),
-            'extendedProps': {
-                'location': appt.location,
-                'status': appt.status,
-                'notes': appt.notes,
-                'session_price': appt.session_price,
-                'amount_paid': appt.amount_paid,
-                'payment_notes': appt.payment_notes,
-                'patient_id': appt.patient_id
-            }
-        })
+        eventos.append({'id': appt.id, 'title': appt.patient.full_name, 'start': appt.start_time.isoformat(), 'color': status_colors.get(appt.status, '#6c757d'), 'borderColor': status_colors.get(appt.status, '#6c757d'), 'extendedProps': {'location': appt.location, 'status': appt.status, 'notes': appt.notes, 'session_price': appt.session_price, 'amount_paid': appt.amount_paid, 'payment_notes': appt.payment_notes, 'patient_id': appt.patient_id}})
     return jsonify(eventos)
 
 @app.route('/api/patients')
@@ -351,26 +346,64 @@ def api_patients():
     patients = Patient.query.filter_by(user_id=current_user.id).order_by(Patient.full_name).all()
     return jsonify([{'id': p.id, 'name': p.full_name} for p in patients])
 
-# --- ROTA DE RELATÓRIOS ---
+# --- ROTA DE RELATÓRIOS (ATUALIZADA) ---
 @app.route('/reports')
 @login_required
 def reports():
     hoje = date.today()
+    
+    # Pega as datas do URL ou define o mês atual como padrão
+    start_date_str = request.args.get('start_date')
+    end_date_str = request.args.get('end_date')
+
+    if start_date_str and end_date_str:
+        start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+        end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+    else:
+        start_date = hoje.replace(day=1)
+        # Calcula o último dia do mês
+        next_month = start_date.replace(day=28) + timedelta(days=4)
+        end_date = next_month - timedelta(days=next_month.day)
+
+    # Converte para datetime para a consulta
+    start_datetime = datetime.combine(start_date, time.min)
+    end_datetime = datetime.combine(end_date, time.max)
+
+    # 1. Relatório financeiro detalhado para o período selecionado
+    financial_appointments = Appointment.query.filter(
+        Appointment.user_id == current_user.id,
+        Appointment.start_time.between(start_datetime, end_datetime)
+    ).order_by(Appointment.start_time.desc()).all()
+
+    # Calcula os totais para o período selecionado
+    total_cobrado_periodo = sum(appt.session_price for appt in financial_appointments if appt.session_price)
+    total_recebido_periodo = sum(appt.amount_paid for appt in financial_appointments if appt.amount_paid)
+
+    # 2. Dados para os gráficos (continuam baseados no mês atual por simplicidade)
     start_of_month = hoje.replace(day=1)
     appointments_this_month = Appointment.query.filter(Appointment.user_id == current_user.id, Appointment.start_time >= start_of_month).all()
     status_counts = {'Concluído': 0, 'Agendado': 0, 'Cancelado': 0}
     for appt in appointments_this_month:
         if appt.status in status_counts: status_counts[appt.status] += 1
-    total_recebido_mes = db.session.query(func.sum(Appointment.amount_paid)).filter(Appointment.user_id == current_user.id, Appointment.start_time >= start_of_month).scalar() or 0.0
-    results = db.session.query(Patient.full_name, func.to_char(Appointment.start_time, 'YYYY-MM').label('month'), func.count(Appointment.id).label('session_count')).join(Appointment).filter(Appointment.user_id == current_user.id, Appointment.start_time >= (hoje - timedelta(days=365))).group_by(Patient.full_name, 'month').order_by(Patient.full_name, 'month').all()
-    patient_monthly_data = defaultdict(dict)
-    all_months = set()
-    for name, month, count in results:
-        patient_monthly_data[name][month] = count
-        all_months.add(month)
-    sorted_months = sorted(list(all_months))
-    return render_template('reports.html', status_counts=status_counts, total_recebido_mes=total_recebido_mes, patient_monthly_data=patient_monthly_data, sorted_months=sorted_months)
-
+    
+    # ... (lógica do gráfico de novos pacientes, sem alteração) ...
+    new_patients_data = {}
+    for i in range(6):
+        target_date = hoje.replace(day=1) - timedelta(days=i * 30)
+        month_key = target_date.strftime("%b/%Y")
+        count = db.session.query(func.count(Patient.id)).filter(Patient.user_id == current_user.id, func.to_char(Patient.created_at, 'YYYY-MM') == target_date.strftime('%Y-%m')).scalar()
+        new_patients_data[month_key] = count
+    
+    return render_template(
+        'reports.html', 
+        status_counts=status_counts, 
+        new_patients_data=new_patients_data,
+        financial_appointments=financial_appointments,
+        total_cobrado=total_cobrado_periodo,
+        total_recebido=total_recebido_periodo,
+        start_date=start_date.strftime('%Y-%m-%d'),
+        end_date=end_date.strftime('%Y-%m-%d')
+    )
 
 # --- COMANDO PARA INICIALIZAR O BANCO DE DADOS ---
 @app.cli.command("init-db")
