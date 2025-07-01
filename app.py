@@ -1,3 +1,5 @@
+# app.py
+
 import os
 from dotenv import load_dotenv
 import uuid
@@ -10,7 +12,7 @@ from datetime import datetime, date, time, timedelta
 import cloudinary, cloudinary.uploader, cloudinary.api
 from sqlalchemy import func, extract
 from collections import defaultdict
-import stripe # Importa a biblioteca do Stripe
+import stripe
 from functools import wraps
 
 load_dotenv()
@@ -93,7 +95,6 @@ def create_checkout_session():
         return jsonify({'error': 'Plano inválido'}), 400
 
     try:
-        # Cria um cliente no Stripe se ainda não existir
         if not current_user.clinic.stripe_customer_id:
             customer = stripe.Customer.create(
                 email=current_user.email,
@@ -102,10 +103,10 @@ def create_checkout_session():
             current_user.clinic.stripe_customer_id = customer.id
             db.session.commit()
 
-        # Cria a Sessão de Checkout
+        # ALTERAÇÃO AQUI: Adiciona 'pix' à lista de métodos de pagamento
         checkout_session = stripe.checkout.Session.create(
             customer=current_user.clinic.stripe_customer_id,
-            payment_method_types=['card'],
+            payment_method_types=['card', 'pix'],
             line_items=[{'price': price_id, 'quantity': 1}],
             mode='subscription',
             success_url=url_for('dashboard', _external=True) + '?session_id={CHECKOUT_SESSION_ID}',
@@ -129,12 +130,10 @@ def stripe_webhook():
     except stripe.error.SignatureVerificationError as e:
         return 'Invalid signature', 400
 
-    # Lida com o evento
     if event['type'] == 'checkout.session.completed':
         session = event['data']['object']
         customer_id = session.get('customer')
         subscription_id = session.get('subscription')
-
         clinic = Clinic.query.filter_by(stripe_customer_id=customer_id).first()
         if clinic:
             clinic.stripe_subscription_id = subscription_id
@@ -144,13 +143,12 @@ def stripe_webhook():
     if event['type'] in ['customer.subscription.deleted', 'customer.subscription.updated']:
         session = event['data']['object']
         subscription_id = session.get('id')
-        
         clinic = Clinic.query.filter_by(stripe_subscription_id=subscription_id).first()
         if clinic:
             if session.get('status') == 'active':
                 clinic.subscription_status = 'active'
             else:
-                clinic.subscription_status = 'inactive' # ex: canceled, past_due
+                clinic.subscription_status = 'inactive'
             db.session.commit()
 
     return 'Success', 200
