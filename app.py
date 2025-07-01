@@ -1,4 +1,4 @@
-# app.py
+# app.py (COMPLETO E FINAL COM SUBSCRIÇÕES MERCADO PAGO)
 
 import os
 from dotenv import load_dotenv
@@ -9,17 +9,19 @@ from flask_migrate import Migrate
 from flask_login import LoginManager, current_user, login_user, logout_user, login_required
 from flask_bcrypt import Bcrypt
 from datetime import datetime, date, time, timedelta
-import cloudinary, cloudinary.uploader, cloudinary.api
+import cloudinary
+import cloudinary.uploader
+import cloudinary.api
 from sqlalchemy import func, extract
 from collections import defaultdict
-import stripe
+import mercadopago
 from functools import wraps
 
-load_dotenv()
+load_dotenv() # Carrega as variáveis do ficheiro .env para o ambiente
 
 # --- CONFIGURAÇÃO DA APLICAÇÃO ---
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY') or 'uma-chave-secreta-muito-segura'
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY') or 'uma-chave-secreta-muito-segura-e-diferente-para-testes'
 basedir = os.path.abspath(os.path.dirname(__file__))
 render_db_url = os.environ.get('DATABASE_URL')
 if render_db_url and render_db_url.startswith("postgres://"):
@@ -27,12 +29,9 @@ if render_db_url and render_db_url.startswith("postgres://"):
 app.config['SQLALCHEMY_DATABASE_URI'] = render_db_url or 'sqlite:///' + os.path.join(basedir, 'app.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# --- CONFIGURAÇÃO DO STRIPE ---
-stripe.api_key = os.environ.get('STRIPE_SECRET_KEY')
-app.config['STRIPE_PUBLISHABLE_KEY'] = os.environ.get('STRIPE_PUBLISHABLE_KEY')
-app.config['STRIPE_PRICE_ID_MENSAL'] = os.environ.get('STRIPE_PRICE_ID_MENSAL')
-app.config['STRIPE_PRICE_ID_ANUAL'] = os.environ.get('STRIPE_PRICE_ID_ANUAL')
-app.config['STRIPE_WEBHOOK_SECRET'] = os.environ.get('STRIPE_WEBHOOK_SECRET')
+# --- IDS DOS PLANOS DO MERCADO PAGO ---
+app.config['MERCADO_PAGO_PLANO_MENSAL_ID'] = os.environ.get('MP_PLANO_MENSAL_ID')
+app.config['MERCADO_PAGO_PLANO_ANUAL_ID'] = os.environ.get('MP_PLANO_ANUAL_ID')
 
 
 # --- INICIALIZAÇÃO DAS EXTENSÕES ---
@@ -45,9 +44,9 @@ login_manager.login_view = 'login'
 login_manager.login_message = 'Por favor, faça o login para aceder a esta página.'
 login_manager.login_message_category = 'info'
 
-# --- CONFIGURAÇÃO DO CLOUDINARY ---
+# --- CONFIGURAÇÃO DOS SDKs ---
+mp_sdk = mercadopago.SDK(os.environ.get("MERCADO_PAGO_ACCESS_TOKEN"))
 cloudinary.config(cloud_name=os.environ.get('CLOUDINARY_CLOUD_NAME'), api_key=os.environ.get('CLOUDINARY_API_KEY'), api_secret=os.environ.get('CLOUDINARY_API_SECRET'), secure=True)
-
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -65,7 +64,7 @@ def format_datetime_filter(s, format='%d/%m/%Y'):
     if hasattr(s, 'strftime'): return s.strftime(format)
     return s
 
-# --- DECORADOR PARA VERIFICAR SUBSCRIÇÃO ---
+# --- DECORADOR PARA VERIFICAR SUBSCRIÇÃO ATIVA ---
 def subscription_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
@@ -79,79 +78,55 @@ def subscription_required(f):
 @app.route('/pricing')
 @login_required
 def pricing():
-    return render_template('pricing_stripe.html', title="Planos e Preços")
+    return render_template('pricing_mercadopago.html', title="Planos e Preços")
 
-@app.route('/create-checkout-session', methods=['POST'])
+@app.route('/create-subscription/<plan_type>')
 @login_required
-def create_checkout_session():
-    data = request.get_json()
-    plan_type = data.get('plan_type')
-
+def create_subscription(plan_type):
     if plan_type == 'mensal':
-        price_id = app.config['STRIPE_PRICE_ID_MENSAL']
+        plan_id = app.config['MERCADO_PAGO_PLANO_MENSAL_ID']
     elif plan_type == 'anual':
-        price_id = app.config['STRIPE_PRICE_ID_ANUAL']
+        plan_id = app.config['MERCADO_PAGO_PLANO_ANUAL_ID']
     else:
-        return jsonify({'error': 'Plano inválido'}), 400
-
+        abort(404)
+    subscription_data = {"preapproval_plan_id": plan_id, "reason": f"Assinatura FisioManager - Plano {plan_type.capitalize()}", "payer_email": current_user.email, "back_url": url_for('dashboard', _external=True)}
     try:
-        if not current_user.clinic.stripe_customer_id:
-            customer = stripe.Customer.create(
-                email=current_user.email,
-                name=current_user.clinic.name,
-            )
-            current_user.clinic.stripe_customer_id = customer.id
+        result = mp_sdk.preapproval().create(subscription_data)
+        if result["status"] == 201:
+            current_user.clinic.mp_subscription_id = result["response"]["id"]
             db.session.commit()
-
-        # ALTERAÇÃO AQUI: Adiciona 'pix' à lista de métodos de pagamento
-        checkout_session = stripe.checkout.Session.create(
-            customer=current_user.clinic.stripe_customer_id,
-            payment_method_types=['card', 'pix'],
-            line_items=[{'price': price_id, 'quantity': 1}],
-            mode='subscription',
-            success_url=url_for('dashboard', _external=True) + '?session_id={CHECKOUT_SESSION_ID}',
-            cancel_url=url_for('pricing', _external=True),
-        )
-        return jsonify({'sessionId': checkout_session.id})
+            payment_link = result["response"]["init_point"]
+            return redirect(payment_link)
+        else:
+            flash(f"Erro ao criar subscrição no Mercado Pago: {result.get('message', 'Erro desconhecido')}", 'danger')
+            return redirect(url_for('pricing'))
     except Exception as e:
-        return jsonify({'error': str(e)}), 403
+        app.logger.error(f"Erro na API do Mercado Pago: {e}")
+        flash("Ocorreu um erro ao comunicar com o sistema de pagamentos. Tente novamente.", 'danger')
+        return redirect(url_for('pricing'))
 
-@app.route('/stripe-webhook', methods=['POST'])
-def stripe_webhook():
-    payload = request.get_data(as_text=True)
-    sig_header = request.headers.get('Stripe-Signature')
-    webhook_secret = app.config['STRIPE_WEBHOOK_SECRET']
-    event = None
-
-    try:
-        event = stripe.Webhook.construct_event(payload, sig_header, webhook_secret)
-    except ValueError as e:
-        return 'Invalid payload', 400
-    except stripe.error.SignatureVerificationError as e:
-        return 'Invalid signature', 400
-
-    if event['type'] == 'checkout.session.completed':
-        session = event['data']['object']
-        customer_id = session.get('customer')
-        subscription_id = session.get('subscription')
-        clinic = Clinic.query.filter_by(stripe_customer_id=customer_id).first()
-        if clinic:
-            clinic.stripe_subscription_id = subscription_id
-            clinic.subscription_status = 'active'
-            db.session.commit()
-            
-    if event['type'] in ['customer.subscription.deleted', 'customer.subscription.updated']:
-        session = event['data']['object']
-        subscription_id = session.get('id')
-        clinic = Clinic.query.filter_by(stripe_subscription_id=subscription_id).first()
-        if clinic:
-            if session.get('status') == 'active':
-                clinic.subscription_status = 'active'
-            else:
-                clinic.subscription_status = 'inactive'
-            db.session.commit()
-
-    return 'Success', 200
+@app.route('/mercadopago-webhook', methods=['POST'])
+def mercadopago_webhook():
+    data = request.get_json()
+    if data and data.get("type") == "preapproval":
+        subscription_id = data.get("data", {}).get("id")
+        if subscription_id:
+            try:
+                subscription_details = mp_sdk.preapproval().get(subscription_id)
+                if subscription_details["status"] == 200:
+                    response = subscription_details["response"]
+                    clinic = Clinic.query.filter_by(mp_subscription_id=subscription_id).first()
+                    if clinic:
+                        new_status = response.get("status")
+                        if new_status == "authorized":
+                            clinic.subscription_status = "active"
+                        else:
+                            clinic.subscription_status = "inactive"
+                        db.session.commit()
+            except Exception as e:
+                app.logger.error(f"Erro ao processar webhook do MP: {e}")
+                return "Erro no processamento", 500
+    return "OK", 200
 
 # --- ROTAS DE AUTENTICAÇÃO ---
 @app.route('/register', methods=['GET', 'POST'])

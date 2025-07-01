@@ -30,4 +30,3 @@ typing-extensions
 urllib3
 Werkzeug
 WTForms
-stripe
