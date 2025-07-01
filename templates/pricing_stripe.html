@@ -54,26 +54,43 @@
             button.addEventListener('click', function () {
                 const planType = this.getAttribute('data-plan');
 
+                // Desativa o botão para evitar múltiplos cliques
+                button.disabled = true;
+                button.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> A redirecionar...';
+
                 fetch('/create-checkout-session', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ plan_type: planType })
                 })
-                .then(response => response.json())
+                .then(response => {
+                    // Primeiro, verificamos se a resposta da nossa API foi bem-sucedida
+                    if (!response.ok) {
+                        // Se não foi (ex: erro 403, 500), lemos o erro e rejeitamos a promessa
+                        return response.json().then(err => Promise.reject(err));
+                    }
+                    return response.json();
+                })
                 .then(session => {
+                    // Se a resposta foi OK e temos um sessionId, redirecionamos para o Stripe
                     if (session.sessionId) {
                         return stripe.redirectToCheckout({ sessionId: session.sessionId });
                     } else {
-                        alert('Erro ao criar a sessão de pagamento.');
+                        // Se a resposta foi OK mas não veio o sessionId, é um erro inesperado
+                        throw new Error('ID da sessão de checkout não recebido.');
                     }
                 })
-                .then(function (result) {
-                    if (result.error) {
-                        alert(result.error.message);
-                    }
+                .catch(error => {
+                    // Aqui apanhamos todos os erros, tanto da rede como os que rejeitámos
+                    console.error('Erro ao criar sessão de checkout:', error);
+                    alert('Ocorreu um erro: ' + (error.error || 'Não foi possível iniciar o pagamento. Tente novamente.'));
+                    // Reativa o botão em caso de erro
+                    button.disabled = false;
+                    button.innerHTML = `Assinar Plano ${planType === 'mensal' ? 'Mensal' : 'Anual'}`;
                 });
             });
         });
     });
 </script>
 {% endblock %}
+```
