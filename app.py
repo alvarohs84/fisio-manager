@@ -1,4 +1,4 @@
-# app.py (COMPLETO E FINAL COM SUBSCRIÇÕES MERCADO PAGO)
+# app.py (COMPLETO E COM MELHOR DEPURAÇÃO DE ERROS)
 
 import os
 from dotenv import load_dotenv
@@ -89,21 +89,34 @@ def create_subscription(plan_type):
         plan_id = app.config['MERCADO_PAGO_PLANO_ANUAL_ID']
     else:
         abort(404)
+        
+    if not plan_id:
+        flash("Os IDs dos planos de subscrição não estão configurados no servidor.", 'danger')
+        return redirect(url_for('pricing'))
+
     subscription_data = {"preapproval_plan_id": plan_id, "reason": f"Assinatura FisioManager - Plano {plan_type.capitalize()}", "payer_email": current_user.email, "back_url": url_for('dashboard', _external=True)}
+    
     try:
         result = mp_sdk.preapproval().create(subscription_data)
+        
         if result["status"] == 201:
             current_user.clinic.mp_subscription_id = result["response"]["id"]
             db.session.commit()
             payment_link = result["response"]["init_point"]
             return redirect(payment_link)
         else:
-            flash(f"Erro ao criar subscrição no Mercado Pago: {result.get('message', 'Erro desconhecido')}", 'danger')
+            flash(f"Erro inesperado do Mercado Pago: {result.get('response', {}).get('message', 'Sem detalhes')}", 'danger')
             return redirect(url_for('pricing'))
-    except Exception as e:
-        app.logger.error(f"Erro na API do Mercado Pago: {e}")
-        flash("Ocorreu um erro ao comunicar com o sistema de pagamentos. Tente novamente.", 'danger')
+
+    except mercadopago.exceptions.MPException as e:
+        app.logger.error(f"Erro na API do Mercado Pago: {e.message}")
+        flash(f"Erro ao criar subscrição: {e.message}", 'danger')
         return redirect(url_for('pricing'))
+    except Exception as e:
+        app.logger.error(f"Erro inesperado: {e}")
+        flash("Ocorreu um erro de comunicação. Tente novamente.", 'danger')
+        return redirect(url_for('pricing'))
+
 
 @app.route('/mercadopago-webhook', methods=['POST'])
 def mercadopago_webhook():
@@ -389,4 +402,5 @@ def init_db_command():
 
 if __name__ == '__main__':
     app.run(debug=True)
+
 
