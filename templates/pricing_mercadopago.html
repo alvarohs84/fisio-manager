@@ -1,5 +1,29 @@
 {% extends "base.html" %}
 
+{% block styles %}
+<!-- Estilos para os botões customizados do Mercado Pago -->
+<style>
+    .blue-button {
+        background-color: #3483FA;
+        color: white !important; /* Adicionado !important para sobrepor o estilo do Bootstrap */
+        padding: 10px 24px;
+        text-decoration: none;
+        border-radius: 6px;
+        display: inline-block;
+        font-size: 16px;
+        transition: background-color 0.3s;
+        font-family: Arial, sans-serif;
+        border: none;
+        cursor: pointer;
+    }
+    .blue-button:hover {
+        background-color: #2a68c8;
+        color: white !important;
+    }
+</style>
+{% endblock %}
+
+
 {% block content %}
 <div class="container py-3">
   <header>
@@ -11,6 +35,8 @@
 
   <main>
     <div class="row row-cols-1 row-cols-md-2 mb-3 text-center justify-content-center">
+      
+      <!-- Card do Plano Mensal -->
       <div class="col">
         <div class="card mb-4 rounded-3 shadow-sm">
           <div class="card-header py-3">
@@ -24,10 +50,13 @@
               <li>Prontuário Eletrônico</li>
               <li>Relatórios e Análises</li>
             </ul>
-            <a href="{{ url_for('create_subscription', plan_type='mensal') }}" class="w-100 btn btn-lg btn-outline-primary">Assinar com Mercado Pago</a>
+            <!-- BOTÃO MENSAL DO MERCADO PAGO -->
+            <a href="https://www.mercadopago.com.br/subscriptions/checkout?preapproval_plan_id=2c93808497c19ac40197c926accb040f" name="MP-payButton" class='w-100 btn btn-lg blue-button'>Assinar Plano Mensal</a>
           </div>
         </div>
       </div>
+
+      <!-- Card do Plano Anual -->
       <div class="col">
         <div class="card mb-4 rounded-3 shadow-sm border-primary">
           <div class="card-header py-3 text-white bg-primary border-primary">
@@ -40,7 +69,8 @@
               <li>Todas as funcionalidades incluídas</li>
               <li>Suporte prioritário</li>
             </ul>
-            <a href="{{ url_for('create_subscription', plan_type='anual') }}" class="w-100 btn btn-lg btn-primary">Assinar com Mercado Pago</a>
+            <!-- BOTÃO ANUAL DO MERCADO PAGO -->
+            <a href="https://www.mercadopago.com.br/subscriptions/checkout?preapproval_plan_id=2c93808497c876110197c927feeb00d6" name="MP-payButton" class='w-100 btn btn-lg blue-button'>Assinar Plano Anual</a>
           </div>
         </div>
       </div>
@@ -48,3 +78,24 @@
   </main>
 </div>
 {% endblock %}
+
+{% block scripts %}
+<!-- Script do Mercado Pago (só precisa de ser incluído uma vez na página) -->
+<script type="text/javascript">
+    (function() {
+        function $MPC_load() {
+            window.$MPC_loaded !== true && (function() {
+                var s = document.createElement("script");
+                s.type = "text/javascript";
+                s.async = true;
+                s.src = document.location.protocol + "//secure.mlstatic.com/mptools/render.js";
+                var x = document.getElementsByTagName('script')[0];
+                x.parentNode.insertBefore(s, x);
+                window.$MPC_loaded = true;
+            })();
+        }
+        window.$MPC_loaded !== true ? (window.attachEvent ? window.attachEvent('onload', $MPC_load) : window.addEventListener('load', $MPC_load, false)) : null;
+    })();
+</script>
+{% endblock %}
+```
