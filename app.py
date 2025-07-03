@@ -1,4 +1,4 @@
-# app.py (COMPLETO E COM MELHOR DEPURAÇÃO DE ERROS)
+# app.py (COMPLETO E FINAL COM SUBSCRIÇÕES MERCADO PAGO)
 
 import os
 from dotenv import load_dotenv
@@ -402,5 +402,6 @@ def init_db_command():
 
 if __name__ == '__main__':
     app.run(debug=True)
+
 
 
