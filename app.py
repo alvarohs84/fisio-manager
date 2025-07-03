@@ -1,4 +1,4 @@
-# app.py (COMPLETO E FINAL COM SUBSCRIÇÕES MERCADO PAGO)
+# app.py (COMPLETO E COM CRIAÇÃO DIRETA DE SUBSCRIÇÃO)
 
 import os
 from dotenv import load_dotenv
@@ -17,7 +17,7 @@ from collections import defaultdict
 import mercadopago
 from functools import wraps
 
-load_dotenv() # Carrega as variáveis do ficheiro .env para o ambiente
+load_dotenv()
 
 # --- CONFIGURAÇÃO DA APLICAÇÃO ---
 app = Flask(__name__)
@@ -28,11 +28,6 @@ if render_db_url and render_db_url.startswith("postgres://"):
     render_db_url = render_db_url.replace("postgres://", "postgresql://", 1)
 app.config['SQLALCHEMY_DATABASE_URI'] = render_db_url or 'sqlite:///' + os.path.join(basedir, 'app.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-
-# --- IDS DOS PLANOS DO MERCADO PAGO ---
-app.config['MERCADO_PAGO_PLANO_MENSAL_ID'] = os.environ.get('MP_PLANO_MENSAL_ID')
-app.config['MERCADO_PAGO_PLANO_ANUAL_ID'] = os.environ.get('MP_PLANO_ANUAL_ID')
-
 
 # --- INICIALIZAÇÃO DAS EXTENSÕES ---
 from models import db, User, Patient, Appointment, ElectronicRecord, Assessment, UploadedFile, Clinic
@@ -64,7 +59,6 @@ def format_datetime_filter(s, format='%d/%m/%Y'):
     if hasattr(s, 'strftime'): return s.strftime(format)
     return s
 
-# --- DECORADOR PARA VERIFICAR SUBSCRIÇÃO ATIVA ---
 def subscription_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
@@ -84,17 +78,34 @@ def pricing():
 @login_required
 def create_subscription(plan_type):
     if plan_type == 'mensal':
-        plan_id = app.config['MERCADO_PAGO_PLANO_MENSAL_ID']
+        plan_details = {
+            "reason": "Assinatura Mensal FisioManager",
+            "auto_recurring": {
+                "frequency": 1,
+                "frequency_type": "months",
+                "transaction_amount": 59.90,
+                "currency_id": "BRL"
+            }
+        }
     elif plan_type == 'anual':
-        plan_id = app.config['MERCADO_PAGO_PLANO_ANUAL_ID']
+        plan_details = {
+            "reason": "Assinatura Anual FisioManager",
+            "auto_recurring": {
+                "frequency": 1,
+                "frequency_type": "years",
+                "transaction_amount": 599.00,
+                "currency_id": "BRL"
+            }
+        }
     else:
         abort(404)
-        
-    if not plan_id:
-        flash("Os IDs dos planos de subscrição não estão configurados no servidor.", 'danger')
-        return redirect(url_for('pricing'))
 
-    subscription_data = {"preapproval_plan_id": plan_id, "reason": f"Assinatura FisioManager - Plano {plan_type.capitalize()}", "payer_email": current_user.email, "back_url": url_for('dashboard', _external=True)}
+    subscription_data = {
+        "reason": plan_details["reason"],
+        "auto_recurring": plan_details["auto_recurring"],
+        "back_url": url_for('dashboard', _external=True),
+        "payer_email": current_user.email,
+    }
     
     try:
         result = mp_sdk.preapproval().create(subscription_data)
