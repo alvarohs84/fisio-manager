@@ -1,4 +1,4 @@
-# app.py (COMPLETO E COM CRIAÇÃO DIRETA DE SUBSCRIÇÃO)
+# app.py
 
 import os
 from dotenv import load_dotenv
@@ -19,9 +19,8 @@ from functools import wraps
 
 load_dotenv()
 
-# --- CONFIGURAÇÃO DA APLICAÇÃO ---
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY') or 'uma-chave-secreta-muito-segura-e-diferente-para-testes'
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY') or 'uma-chave-secreta-muito-segura'
 basedir = os.path.abspath(os.path.dirname(__file__))
 render_db_url = os.environ.get('DATABASE_URL')
 if render_db_url and render_db_url.startswith("postgres://"):
@@ -29,7 +28,11 @@ if render_db_url and render_db_url.startswith("postgres://"):
 app.config['SQLALCHEMY_DATABASE_URI'] = render_db_url or 'sqlite:///' + os.path.join(basedir, 'app.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# --- INICIALIZAÇÃO DAS EXTENSÕES ---
+app.config['MERCADO_PAGO_PLANO_MENSAL_ID'] = os.environ.get('MP_PLANO_MENSAL_ID')
+app.config['MERCADO_PAGO_PLANO_ANUAL_ID'] = os.environ.get('MP_PLANO_ANUAL_ID')
+app.config['MERCADO_PAGO_PUBLIC_KEY'] = os.environ.get('MERCADO_PAGO_PUBLIC_KEY')
+
+
 from models import db, User, Patient, Appointment, ElectronicRecord, Assessment, UploadedFile, Clinic
 db.init_app(app)
 migrate = Migrate(app, db)
@@ -39,7 +42,6 @@ login_manager.login_view = 'login'
 login_manager.login_message = 'Por favor, faça o login para aceder a esta página.'
 login_manager.login_message_category = 'info'
 
-# --- CONFIGURAÇÃO DOS SDKs ---
 mp_sdk = mercadopago.SDK(os.environ.get("MERCADO_PAGO_ACCESS_TOKEN"))
 cloudinary.config(cloud_name=os.environ.get('CLOUDINARY_CLOUD_NAME'), api_key=os.environ.get('CLOUDINARY_API_KEY'), api_secret=os.environ.get('CLOUDINARY_API_SECRET'), secure=True)
 
@@ -68,66 +70,65 @@ def subscription_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
-# --- ROTAS DE PAGAMENTO E SUBSCRIÇÃO ---
 @app.route('/pricing')
 @login_required
 def pricing():
-    return render_template('pricing_mercadopago.html', title="Planos e Preços")
+    return render_template('pricing_mercadopago_transparent.html', 
+                           title="Planos e Preços", 
+                           public_key=app.config['MERCADO_PAGO_PUBLIC_KEY'])
 
-@app.route('/create-subscription/<plan_type>')
+@app.route('/create-subscription', methods=['POST'])
 @login_required
-def create_subscription(plan_type):
-    if plan_type == 'mensal':
-        plan_details = {
-            "reason": "Assinatura Mensal FisioManager",
-            "auto_recurring": {
-                "frequency": 1,
-                "frequency_type": "months",
-                "transaction_amount": 59.90,
-                "currency_id": "BRL"
-            }
-        }
-    elif plan_type == 'anual':
-        plan_details = {
-            "reason": "Assinatura Anual FisioManager",
-            "auto_recurring": {
-                "frequency": 1,
-                "frequency_type": "years",
-                "transaction_amount": 599.00,
-                "currency_id": "BRL"
-            }
-        }
-    else:
-        abort(404)
+def create_subscription():
+    data = request.get_json()
+    token = data.get('token')
+    plan_type = data.get('plan_type')
 
-    subscription_data = {
-        "reason": plan_details["reason"],
-        "auto_recurring": plan_details["auto_recurring"],
-        "back_url": url_for('dashboard', _external=True),
-        "payer_email": current_user.email,
-    }
-    
+    if not token or not plan_type:
+        return jsonify({'error': 'Dados incompletos.'}), 400
+
+    if plan_type == 'mensal':
+        plan_id = app.config['MERCADO_PAGO_PLANO_MENSAL_ID']
+    elif plan_type == 'anual':
+        plan_id = app.config['MERCADO_PAGO_PLANO_ANUAL_ID']
+    else:
+        return jsonify({'error': 'Plano inválido.'}), 400
+
     try:
-        result = mp_sdk.preapproval().create(subscription_data)
-        
-        if result["status"] == 201:
-            current_user.clinic.mp_subscription_id = result["response"]["id"]
+        clinic = current_user.clinic
+        if not clinic.mp_customer_id:
+            customer_data = {"email": current_user.email}
+            customer_result = mp_sdk.customer().create(customer_data)
+            if customer_result["status"] != 201:
+                raise Exception("Erro ao criar cliente no Mercado Pago")
+            clinic.mp_customer_id = customer_result["response"]["id"]
             db.session.commit()
-            payment_link = result["response"]["init_point"]
-            return redirect(payment_link)
+
+        card_data = {"token": token}
+        mp_sdk.card().create(clinic.mp_customer_id, card_data)
+
+        subscription_data = {
+            "preapproval_plan_id": plan_id,
+            "payer_email": current_user.email,
+            "back_url": url_for('dashboard', _external=True),
+            "card_token_id": token
+        }
+        result = mp_sdk.preapproval().create(subscription_data)
+
+        if result["status"] == 201:
+            clinic.mp_subscription_id = result["response"]["id"]
+            clinic.subscription_status = 'pending' 
+            db.session.commit()
+            return jsonify({'status': 'success', 'message': 'Subscrição iniciada com sucesso! Aguardando confirmação do pagamento.'})
         else:
-            flash(f"Erro inesperado do Mercado Pago: {result.get('response', {}).get('message', 'Sem detalhes')}", 'danger')
-            return redirect(url_for('pricing'))
+            return jsonify({'status': 'error', 'message': result.get("response", {}).get("message", "Erro desconhecido")}), 400
 
     except mercadopago.exceptions.MPException as e:
-        app.logger.error(f"Erro na API do Mercado Pago: {e.message}")
-        flash(f"Erro ao criar subscrição: {e.message}", 'danger')
-        return redirect(url_for('pricing'))
+        app.logger.error(f"Erro na API do MP: {e.message}")
+        return jsonify({'status': 'error', 'message': e.message}), 500
     except Exception as e:
         app.logger.error(f"Erro inesperado: {e}")
-        flash("Ocorreu um erro de comunicação. Tente novamente.", 'danger')
-        return redirect(url_for('pricing'))
-
+        return jsonify({'status': 'error', 'message': 'Ocorreu um erro interno.'}), 500
 
 @app.route('/mercadopago-webhook', methods=['POST'])
 def mercadopago_webhook():
@@ -152,7 +153,6 @@ def mercadopago_webhook():
                 return "Erro no processamento", 500
     return "OK", 200
 
-# --- ROTAS DE AUTENTICAÇÃO ---
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if current_user.is_authenticated: return redirect(url_for('dashboard'))
@@ -191,7 +191,6 @@ def logout():
     logout_user()
     return redirect(url_for('index'))
 
-# --- ROTAS PRINCIPAIS E DE GESTÃO ---
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -413,6 +412,7 @@ def init_db_command():
 
 if __name__ == '__main__':
     app.run(debug=True)
+
 
 
 

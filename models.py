@@ -10,9 +10,8 @@ class Clinic(db.Model):
     name = db.Column(db.String(150), nullable=False)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     subscription_status = db.Column(db.String(50), default='inactive', nullable=False)
-    
-    # Campos do Stripe removidos e campo do Mercado Pago adicionado/confirmado
     mp_subscription_id = db.Column(db.String(255), nullable=True, index=True)
+    mp_customer_id = db.Column(db.String(255), nullable=True, index=True)
 
     users = db.relationship('User', backref='clinic', lazy='dynamic')
     patients = db.relationship('Patient', backref='clinic', lazy='dynamic')
@@ -20,7 +19,6 @@ class Clinic(db.Model):
     def __repr__(self):
         return f'<Clinic {self.name}>'
 
-# ... (O resto do ficheiro models.py permanece exatamente igual) ...
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
