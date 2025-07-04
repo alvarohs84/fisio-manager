@@ -28,10 +28,6 @@ if render_db_url and render_db_url.startswith("postgres://"):
 app.config['SQLALCHEMY_DATABASE_URI'] = render_db_url or 'sqlite:///' + os.path.join(basedir, 'app.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# Adicionamos a Public Key para o frontend
-app.config['MERCADO_PAGO_PUBLIC_KEY'] = os.environ.get('MERCADO_PAGO_PUBLIC_KEY')
-
-
 from models import db, User, Patient, Appointment, ElectronicRecord, Assessment, UploadedFile, Clinic
 db.init_app(app)
 migrate = Migrate(app, db)
@@ -73,8 +69,7 @@ def access_required(f):
 @app.route('/pricing')
 @login_required
 def pricing():
-    return render_template('pricing_checkout_pro.html', 
-                           title="Passes de Acesso")
+    return render_template('pricing_checkout_pro.html', title="Passes de Acesso")
 
 @app.route('/create-payment/<plan_type>')
 @login_required
@@ -405,6 +400,7 @@ def init_db_command():
 
 if __name__ == '__main__':
     app.run(debug=True)
+
 
 
 
