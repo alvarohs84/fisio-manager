@@ -1,4 +1,4 @@
-# app.py (COMPLETO E ATUALIZADO COM CHECKOUT PRO)
+# app.py
 
 import os
 from dotenv import load_dotenv
@@ -19,7 +19,6 @@ from functools import wraps
 
 load_dotenv()
 
-# --- CONFIGURAÇÃO DA APLICAÇÃO ---
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY') or 'uma-chave-secreta-muito-segura'
 basedir = os.path.abspath(os.path.dirname(__file__))
@@ -29,12 +28,10 @@ if render_db_url and render_db_url.startswith("postgres://"):
 app.config['SQLALCHEMY_DATABASE_URI'] = render_db_url or 'sqlite:///' + os.path.join(basedir, 'app.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# --- IDS DOS PLANOS DO MERCADO PAGO ---
-app.config['MERCADO_PAGO_PLANO_MENSAL_ID'] = os.environ.get('MP_PLANO_MENSAL_ID')
-app.config['MERCADO_PAGO_PLANO_ANUAL_ID'] = os.environ.get('MP_PLANO_ANUAL_ID')
+# Adicionamos a Public Key para o frontend
+app.config['MERCADO_PAGO_PUBLIC_KEY'] = os.environ.get('MERCADO_PAGO_PUBLIC_KEY')
 
 
-# --- INICIALIZAÇÃO DAS EXTENSÕES ---
 from models import db, User, Patient, Appointment, ElectronicRecord, Assessment, UploadedFile, Clinic
 db.init_app(app)
 migrate = Migrate(app, db)
@@ -44,7 +41,6 @@ login_manager.login_view = 'login'
 login_manager.login_message = 'Por favor, faça o login para aceder a esta página.'
 login_manager.login_message_category = 'info'
 
-# --- CONFIGURAÇÃO DOS SDKs ---
 mp_sdk = mercadopago.SDK(os.environ.get("MERCADO_PAGO_ACCESS_TOKEN"))
 cloudinary.config(cloud_name=os.environ.get('CLOUDINARY_CLOUD_NAME'), api_key=os.environ.get('CLOUDINARY_API_KEY'), api_secret=os.environ.get('CLOUDINARY_API_SECRET'), secure=True)
 
@@ -64,86 +60,88 @@ def format_datetime_filter(s, format='%d/%m/%Y'):
     if hasattr(s, 'strftime'): return s.strftime(format)
     return s
 
-# --- DECORADOR PARA VERIFICAR SUBSCRIÇÃO ATIVA ---
-def subscription_required(f):
+def access_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if not current_user.is_authenticated or current_user.clinic.subscription_status != 'active':
-            flash('A sua subscrição não está ativa. Por favor, escolha um plano para continuar.', 'warning')
+        if not current_user.is_authenticated or not current_user.clinic.access_expires_on or current_user.clinic.access_expires_on < datetime.utcnow():
+            flash('O seu acesso expirou ou não está ativo. Por favor, adquira um passe para continuar.', 'warning')
             return redirect(url_for('pricing'))
         return f(*args, **kwargs)
     return decorated_function
 
-# --- ROTAS DE PAGAMENTO E SUBSCRIÇÃO ---
+# --- ROTAS DE PAGAMENTO ---
 @app.route('/pricing')
 @login_required
 def pricing():
-    return render_template('pricing_mercadopago.html', title="Planos e Preços")
+    return render_template('pricing_checkout_pro.html', 
+                           title="Passes de Acesso")
 
-@app.route('/create-subscription/<plan_type>')
+@app.route('/create-payment/<plan_type>')
 @login_required
-def create_subscription(plan_type):
-    if plan_type == 'mensal':
-        plan_id = app.config['MERCADO_PAGO_PLANO_MENSAL_ID']
-    elif plan_type == 'anual':
-        plan_id = app.config['MERCADO_PAGO_PLANO_ANUAL_ID']
-    else:
-        abort(404)
-        
-    if not plan_id:
-        flash("Os IDs dos planos de subscrição não estão configurados no servidor.", 'danger')
-        return redirect(url_for('pricing'))
+def create_payment(plan_type):
+    if plan_type == 'anual':
+        price = 599.00
+        title = "Acesso Anual FisioManager"
+    else: # Mensal como padrão
+        price = 59.90
+        title = "Acesso Mensal FisioManager"
 
-    subscription_data = {
-        "preapproval_plan_id": plan_id,
-        "reason": f"Assinatura FisioManager - Plano {plan_type.capitalize()}",
-        "payer_email": current_user.email,
-        "back_url": url_for('dashboard', _external=True)
+    external_reference = f"clinic_{current_user.clinic_id}_plan_{plan_type}_{uuid.uuid4()}"
+
+    preference_data = {
+        "items": [{"title": title, "quantity": 1, "unit_price": price}],
+        "payer": {"email": current_user.email},
+        "back_urls": {
+            "success": url_for('dashboard', _external=True),
+            "failure": url_for('pricing', _external=True),
+            "pending": url_for('pricing', _external=True)
+        },
+        "auto_return": "approved",
+        "external_reference": external_reference,
+        "notification_url": url_for('mercadopago_ipn', _external=True)
     }
-    
+
     try:
-        result = mp_sdk.preapproval().create(subscription_data)
-        
-        if result["status"] == 201:
-            current_user.clinic.mp_subscription_id = result["response"]["id"]
-            db.session.commit()
-            payment_link = result["response"]["init_point"]
-            return redirect(payment_link)
+        preference_result = mp_sdk.preference().create(preference_data)
+        if preference_result["status"] == 201:
+            return redirect(preference_result["response"]["init_point"])
         else:
-            flash(f"Erro inesperado do Mercado Pago: {result.get('response', {}).get('message', 'Sem detalhes')}", 'danger')
+            flash("Erro ao criar preferência de pagamento.", 'danger')
             return redirect(url_for('pricing'))
-
-    except mercadopago.exceptions.MPException as e:
-        app.logger.error(f"Erro na API do Mercado Pago: {e.message}")
-        flash(f"Erro ao criar subscrição: {e.message}", 'danger')
-        return redirect(url_for('pricing'))
     except Exception as e:
-        app.logger.error(f"Erro inesperado: {e}")
-        flash("Ocorreu um erro de comunicação. Tente novamente.", 'danger')
+        app.logger.error(f"Erro na API do Mercado Pago: {e}")
+        flash("Ocorreu um erro ao comunicar com o sistema de pagamentos.", 'danger')
         return redirect(url_for('pricing'))
 
-
-@app.route('/mercadopago-webhook', methods=['POST'])
-def mercadopago_webhook():
+@app.route('/mercadopago-ipn', methods=['POST'])
+def mercadopago_ipn():
     data = request.get_json()
-    if data and data.get("type") == "preapproval":
-        subscription_id = data.get("data", {}).get("id")
-        if subscription_id:
+    if data and data.get("type") == "payment":
+        payment_id = data.get("data", {}).get("id")
+        if payment_id:
             try:
-                subscription_details = mp_sdk.preapproval().get(subscription_id)
-                if subscription_details["status"] == 200:
-                    response = subscription_details["response"]
-                    clinic = Clinic.query.filter_by(mp_subscription_id=subscription_id).first()
-                    if clinic:
-                        new_status = response.get("status")
-                        if new_status == "authorized":
-                            clinic.subscription_status = "active"
-                        else:
-                            clinic.subscription_status = "inactive"
-                        db.session.commit()
+                payment_info = mp_sdk.payment().get(payment_id)
+                if payment_info["status"] == 200:
+                    payment = payment_info["response"]
+                    if payment.get("status") == "approved":
+                        external_ref = payment.get("external_reference")
+                        if external_ref and external_ref.startswith("clinic_"):
+                            parts = external_ref.split('_')
+                            clinic_id = int(parts[1])
+                            plan_type = parts[3]
+                            
+                            clinic = Clinic.query.get(clinic_id)
+                            if clinic:
+                                duration = 365 if plan_type == 'anual' else 30
+                                current_expiry = clinic.access_expires_on or datetime.utcnow()
+                                if current_expiry < datetime.utcnow():
+                                    current_expiry = datetime.utcnow()
+                                
+                                clinic.access_expires_on = current_expiry + timedelta(days=duration)
+                                db.session.commit()
             except Exception as e:
-                app.logger.error(f"Erro ao processar webhook do MP: {e}")
-                return "Erro no processamento", 500
+                app.logger.error(f"Erro ao processar IPN do MP: {e}")
+                return "Erro", 500
     return "OK", 200
 
 # --- ROTAS DE AUTENTICAÇÃO ---
@@ -153,14 +151,14 @@ def register():
     from forms import RegistrationForm
     form = RegistrationForm()
     if form.validate_on_submit():
-        new_clinic = Clinic(name=f"Clínica de {form.name.data}", subscription_status='inactive')
+        new_clinic = Clinic(name=f"Clínica de {form.name.data}")
         db.session.add(new_clinic)
         db.session.commit()
         user = User(name=form.name.data, email=form.email.data, clinic_id=new_clinic.id)
         user.set_password(form.password.data)
         db.session.add(user)
         db.session.commit()
-        flash('Sua conta e sua clínica foram criadas com sucesso! Escolha um plano para começar.', 'success')
+        flash('Sua conta foi criada com sucesso! Adquira um passe de acesso para começar.', 'success')
         login_user(user)
         return redirect(url_for('pricing'))
     return render_template('register.html', title='Registrar', form=form)
@@ -192,7 +190,7 @@ def index():
 
 @app.route('/dashboard')
 @login_required
-@subscription_required
+@access_required
 def dashboard():
     hoje = datetime.utcnow()
     proximos_agendamentos = Appointment.query.join(User).filter(User.clinic_id == current_user.clinic_id, Appointment.start_time >= hoje).order_by(Appointment.start_time.asc()).limit(5).all()
@@ -202,13 +200,13 @@ def dashboard():
 
 @app.route('/agenda')
 @login_required
-@subscription_required
+@access_required
 def agenda():
     return render_template('agenda_grid.html')
 
 @app.route('/patients')
 @login_required
-@subscription_required
+@access_required
 def list_patients():
     page = request.args.get('page', 1, type=int)
     search_query = request.args.get('q', '')
@@ -226,7 +224,7 @@ def list_patients():
 
 @app.route('/patient/add', methods=['GET', 'POST'])
 @login_required
-@subscription_required
+@access_required
 def add_patient():
     from forms import PatientForm
     form = PatientForm()
@@ -240,7 +238,7 @@ def add_patient():
 
 @app.route('/patient/<int:patient_id>/edit', methods=['GET', 'POST'])
 @login_required
-@subscription_required
+@access_required
 def edit_patient(patient_id):
     patient = Patient.query.get_or_404(patient_id)
     if patient.clinic_id != current_user.clinic_id: abort(403)
@@ -259,7 +257,7 @@ def edit_patient(patient_id):
 
 @app.route('/patient/<int:patient_id>/delete', methods=['POST'])
 @login_required
-@subscription_required
+@access_required
 def delete_patient(patient_id):
     patient = Patient.query.get_or_404(patient_id)
     if patient.clinic_id != current_user.clinic_id: abort(403)
@@ -270,7 +268,7 @@ def delete_patient(patient_id):
 
 @app.route('/patient/<int:patient_id>')
 @login_required
-@subscription_required
+@access_required
 def patient_detail(patient_id):
     patient = Patient.query.get_or_404(patient_id)
     if patient.clinic_id != current_user.clinic_id: abort(403)
@@ -280,7 +278,7 @@ def patient_detail(patient_id):
 
 @app.route('/patient/<int:patient_id>/add_record', methods=['GET', 'POST'])
 @login_required
-@subscription_required
+@access_required
 def add_record(patient_id):
     patient = Patient.query.get_or_404(patient_id)
     if patient.clinic_id != current_user.clinic_id: abort(403)
@@ -296,7 +294,7 @@ def add_record(patient_id):
 
 @app.route('/patient/<int:patient_id>/add_assessment', methods=['GET', 'POST'])
 @login_required
-@subscription_required
+@access_required
 def add_assessment(patient_id):
     patient = Patient.query.get_or_404(patient_id)
     if patient.clinic_id != current_user.clinic_id: abort(403)
@@ -319,7 +317,7 @@ def add_assessment(patient_id):
 
 @app.route('/assessment/<int:assessment_id>')
 @login_required
-@subscription_required
+@access_required
 def view_assessment(assessment_id):
     assessment = Assessment.query.get_or_404(assessment_id)
     if assessment.patient.clinic_id != current_user.clinic_id: abort(403)
@@ -327,7 +325,7 @@ def view_assessment(assessment_id):
 
 @app.route('/reports')
 @login_required
-@subscription_required
+@access_required
 def reports():
     hoje = date.today()
     start_date_str = request.args.get('start_date')
@@ -355,7 +353,7 @@ def reports():
 # --- APIS ---
 @app.route('/api/appointments')
 @login_required
-@subscription_required
+@access_required
 def api_appointments():
     appointments = db.session.query(Appointment).join(User).filter(User.clinic_id == current_user.clinic_id).all()
     status_colors = {'Concluído': '#198754', 'Agendado': '#0dcaf0', 'Cancelado': '#6c757d'}
@@ -407,6 +405,7 @@ def init_db_command():
 
 if __name__ == '__main__':
     app.run(debug=True)
+
 
 
 
