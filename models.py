@@ -1,3 +1,5 @@
+# models.py
+
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -9,9 +11,9 @@ class Clinic(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(150), nullable=False)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
-    subscription_status = db.Column(db.String(50), default='inactive', nullable=False)
-    mp_subscription_id = db.Column(db.String(255), nullable=True, index=True)
-    mp_customer_id = db.Column(db.String(255), nullable=True, index=True)
+    
+    # ESTA É A LINHA CRUCIAL QUE PRECISA DE ESTAR AQUI
+    access_expires_on = db.Column(db.DateTime, nullable=True)
 
     users = db.relationship('User', backref='clinic', lazy='dynamic')
     patients = db.relationship('Patient', backref='clinic', lazy='dynamic')
