@@ -1,31 +1,48 @@
 {% extends "base.html" %}
 
+{% block styles %}
+<style>
+    .hero-section {
+        min-height: 85vh; /* A secção ocupa quase toda a altura da tela */
+    }
+    .hero-image {
+        width: 100%;
+        height: 100%;
+        object-fit: cover; /* Garante que a imagem cubra o espaço sem distorcer */
+        max-height: 85vh; /* Limita a altura máxima da imagem */
+    }
+</style>
+{% endblock %}
+
+
 {% block content %}
-<!-- Secção Principal (Hero) -->
-<div class="bg-light border-bottom">
-  <div class="container col-xxl-8 px-4 py-5">
-      <div class="row flex-lg-row-reverse align-items-center g-5 py-4">
-        <div class="col-12 col-lg-6">
-          <img src="https://physioschool.ca/wp-content/uploads/2021/12/Whats-the-difference-between-a-PT-and-PTA-in-Canadian-healthcare-min.jpg" 
-               class="d-block mx-lg-auto img-fluid rounded shadow-lg" 
-               alt="Fisioterapeuta atendendo um paciente" 
-               loading="lazy"
-               onerror="this.onerror=null;this.src='https://placehold.co/600x400/0d6efd/white?text=FisioManager';">
-        </div>
-        <div class="col-lg-6">
-          <h1 class="display-4 fw-bold lh-1 mb-3">Otimize a sua clínica, transforme vidas</h1>
-          <p class="lead">FisioManager é a solução completa para fisioterapeutas que desejam focar no que realmente importa: os seus pacientes. Organize a sua agenda, prontuários, avaliações e finanças num só lugar, de forma simples e intuitiva.</p>
-          <div class="d-grid gap-2 d-md-flex justify-content-md-start">
-            {% if current_user.is_authenticated %}
-              <a href="{{ url_for('dashboard') }}" class="btn btn-primary btn-lg px-4 me-md-2"><i class="bi bi-speedometer2 me-2"></i>Ir para o Dashboard</a>
-            {% else %}
-              <a href="{{ url_for('register') }}" class="btn btn-primary btn-lg px-4 me-md-2"><i class="bi bi-person-plus-fill me-2"></i>Comece Agora</a>
-              <a href="{{ url_for('login') }}" class="btn btn-outline-secondary btn-lg px-4">Fazer Login</a>
-            {% endif %}
-          </div>
+<!-- Secção Principal (Hero) com layout de ecrã dividido -->
+<div class="container-fluid px-0">
+  <div class="row g-0 align-items-center hero-section">
+    <!-- Coluna de Texto -->
+    <div class="col-lg-6">
+      <div class="p-5 text-center text-lg-start">
+        <h1 class="display-4 fw-bold lh-1 mb-3">Otimize a sua clínica, transforme vidas</h1>
+        <p class="lead">FisioManager é a solução completa para fisioterapeutas que desejam focar no que realmente importa: os seus pacientes. Organize a sua agenda, prontuários, avaliações e finanças num só lugar, de forma simples e intuitiva.</p>
+        <div class="d-grid gap-2 d-md-flex justify-content-md-start justify-content-center">
+          {% if current_user.is_authenticated %}
+            <a href="{{ url_for('dashboard') }}" class="btn btn-primary btn-lg px-4 me-md-2"><i class="bi bi-speedometer2 me-2"></i>Ir para o Dashboard</a>
+          {% else %}
+            <a href="{{ url_for('register') }}" class="btn btn-primary btn-lg px-4 me-md-2"><i class="bi bi-person-plus-fill me-2"></i>Comece Agora</a>
+            <a href="{{ url_for('login') }}" class="btn btn-outline-secondary btn-lg px-4">Fazer Login</a>
+          {% endif %}
         </div>
       </div>
     </div>
+    <!-- Coluna da Imagem (visível apenas em ecrãs grandes) -->
+    <div class="col-lg-6 d-none d-lg-block h-100">
+        <img src="https://cbapi.cbphysiotherapy.in/images/home_slider/slider1.webp" 
+             class="hero-image"
+             alt="Fisioterapeuta atendendo um paciente" 
+             loading="lazy"
+             onerror="this.onerror=null;this.src='https://placehold.co/600x800/0d6efd/white?text=FisioManager';">
+    </div>
+  </div>
 </div>
 
 <!-- Secção de Destaque de Funcionalidades -->
@@ -53,11 +70,12 @@
         <div class="feature-icon-small d-inline-flex align-items-center justify-content-center text-bg-primary bg-gradient fs-4 rounded-3 mb-3 p-3">
           <i class="bi bi-currency-dollar"></i>
         </div>
-        <h3 class="fs-2">Controle Financeiro</h3>
+        <h3 class="fs-2">Controlo Financeiro</h3>
         <p>Registe pagamentos, controle o saldo devedor de cada paciente e visualize relatórios financeiros para uma gestão completa da sua clínica.</p>
       </div>
     </div>
   </div>
 {% endblock %}
+
 
 
