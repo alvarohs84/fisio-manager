@@ -1,16 +1,35 @@
 {% extends "base.html" %}
 
+{% block styles %}
+<style>
+    /* Customização de cores */
+    .btn-custom-green {
+        background-color: #198754; /* Verde do Bootstrap */
+        border-color: #198754;
+        color: white;
+    }
+    .btn-custom-green:hover {
+        background-color: #157347;
+        border-color: #146c43;
+    }
+    .feature-icon-green {
+        background-color: #198754 !important; /* Força a cor verde */
+    }
+</style>
+{% endblock %}
+
+
 {% block content %}
 <!-- Secção Principal (Hero) -->
 <div class="bg-light border-bottom">
   <div class="container col-xxl-8 px-4 py-5">
       <div class="row flex-lg-row-reverse align-items-center g-5 py-4">
         <div class="col-12 col-lg-6">
-          <img src="https://physiozonebd.com/wp-content/uploads/2024/11/Expert-Physiotherapy-1024x576.jpg" 
+          <img src="https://images.pexels.com/photos/7579042/pexels-photo-7579042.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1" 
                class="d-block mx-lg-auto img-fluid rounded shadow-lg" 
                alt="Fisioterapeuta atendendo um paciente" 
                loading="lazy"
-               onerror="this.onerror=null;this.src='https://placehold.co/600x400/007bff/white?text=FisioManager';">
+               onerror="this.onerror=null;this.src='https://placehold.co/600x400/0d6efd/white?text=FisioManager';">
         </div>
         <div class="col-lg-6">
           <h1 class="display-4 fw-bold lh-1 mb-3">Otimize a sua clínica, transforme vidas</h1>
@@ -19,7 +38,7 @@
             {% if current_user.is_authenticated %}
               <a href="{{ url_for('dashboard') }}" class="btn btn-primary btn-lg px-4 me-md-2"><i class="bi bi-speedometer2 me-2"></i>Ir para o Dashboard</a>
             {% else %}
-              <a href="{{ url_for('register') }}" class="btn btn-primary btn-lg px-4 me-md-2"><i class="bi bi-person-plus-fill me-2"></i>Comece Agora</a>
+              <a href="{{ url_for('register') }}" class="btn btn-custom-green btn-lg px-4 me-md-2"><i class="bi bi-person-plus-fill me-2"></i>Comece Agora</a>
               <a href="{{ url_for('login') }}" class="btn btn-outline-secondary btn-lg px-4">Fazer Login</a>
             {% endif %}
           </div>
@@ -28,11 +47,12 @@
     </div>
 </div>
 
-<!-- NOVA SECÇÃO: Destaque de Funcionalidades -->
+<!-- Secção de Destaque de Funcionalidades -->
 <div class="container px-4 py-5" id="featured-3">
-    <h2 class="pb-2 border-bottom text-center">Principais Funcionalidades</h2>
+    <h2 class="pb-2 border-bottom text-center">Funcionalidades Principais</h2>
     <div class="row g-4 py-5 row-cols-1 row-cols-lg-3">
       <div class="feature col text-center">
+        <!-- Ícone azul -->
         <div class="feature-icon-small d-inline-flex align-items-center justify-content-center text-bg-primary bg-gradient fs-4 rounded-3 mb-3 p-3">
           <i class="bi bi-calendar-check"></i>
         </div>
@@ -40,19 +60,22 @@
         <p>Organize os seus atendimentos, crie agendamentos recorrentes e tenha uma visão clara da sua semana, tudo com alguns cliques.</p>
       </div>
       <div class="feature col text-center">
-        <div class="feature-icon-small d-inline-flex align-items-center justify-content-center text-bg-primary bg-gradient fs-4 rounded-3 mb-3 p-3">
+        <!-- Ícone verde -->
+        <div class="feature-icon-small d-inline-flex align-items-center justify-content-center text-light feature-icon-green bg-gradient fs-4 rounded-3 mb-3 p-3">
           <i class="bi bi-file-earmark-medical"></i>
         </div>
         <h3 class="fs-2">Prontuário Completo</h3>
         <p>Registe avaliações detalhadas, anexe exames e acompanhe a evolução de cada paciente com um prontuário eletrónico seguro e de fácil acesso.</p>
       </div>
       <div class="feature col text-center">
+        <!-- Ícone azul -->
         <div class="feature-icon-small d-inline-flex align-items-center justify-content-center text-bg-primary bg-gradient fs-4 rounded-3 mb-3 p-3">
           <i class="bi bi-currency-dollar"></i>
         </div>
-        <h3 class="fs-2">Controle Financeiro</h3>
+        <h3 class="fs-2">Controlo Financeiro</h3>
         <p>Registe pagamentos, controle o saldo devedor de cada paciente e visualize relatórios financeiros para uma gestão completa da sua clínica.</p>
       </div>
     </div>
   </div>
 {% endblock %}
+
