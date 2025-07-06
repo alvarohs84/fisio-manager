@@ -59,12 +59,15 @@ def format_datetime_filter(s, format='%d/%m/%Y'):
 def access_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if not current_user.is_authenticated or not current_user.clinic.access_expires_on or current_user.clinic.access_expires_on < datetime.utcnow():
-            flash('O seu acesso expirou ou não está ativo. Por favor, adquira um passe para continuar.', 'warning')
-            return redirect(url_for('pricing'))
+        # A verificação de acesso está desabilitada para testes.
+        # Lembre-se de reativar em produção, removendo os comentários abaixo.
+        # if not current_user.is_authenticated or not current_user.clinic.access_expires_on or current_user.clinic.access_expires_on < datetime.utcnow():
+        #     flash('O seu acesso expirou ou não está ativo. Por favor, adquira um passe para continuar.', 'warning')
+        #     return redirect(url_for('pricing'))
         return f(*args, **kwargs)
     return decorated_function
 
+# --- ROTAS DE PAGAMENTO ---
 @app.route('/pricing')
 @login_required
 def pricing():
@@ -138,6 +141,7 @@ def mercadopago_ipn():
                 return "Erro", 500
     return "OK", 200
 
+# --- ROTAS DE AUTENTICAÇÃO ---
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if current_user.is_authenticated: return redirect(url_for('dashboard'))
@@ -176,13 +180,14 @@ def logout():
     logout_user()
     return redirect(url_for('index'))
 
+# --- ROTAS PRINCIPAIS E DE GESTÃO ---
 @app.route('/')
 def index():
     return render_template('index.html')
 
 @app.route('/dashboard')
-# @login_required
-# @access_required
+@login_required
+@access_required
 def dashboard():
     hoje = datetime.utcnow()
     proximos_agendamentos = Appointment.query.join(User).filter(User.clinic_id == current_user.clinic_id, Appointment.start_time >= hoje).order_by(Appointment.start_time.asc()).limit(5).all()
@@ -191,14 +196,14 @@ def dashboard():
     return render_template('dashboard.html', proximos_agendamentos=proximos_agendamentos, ultimos_pacientes=ultimos_pacientes, aniversariantes_do_mes=aniversariantes_do_mes)
 
 @app.route('/agenda')
-# @login_required
-# @access_required
+@login_required
+@access_required
 def agenda():
     return render_template('agenda_grid.html')
 
 @app.route('/patients')
-# @login_required
-# @access_required
+@login_required
+@access_required
 def list_patients():
     page = request.args.get('page', 1, type=int)
     search_query = request.args.get('q', '')
@@ -215,8 +220,8 @@ def list_patients():
     return render_template('list_patients.html', patients_pagination=patients_pagination, patients_enriched=patients_enriched, search_query=search_query, title="Painel de Pacientes")
 
 @app.route('/patient/add', methods=['GET', 'POST'])
-# @login_required
-# @access_required
+@login_required
+@access_required
 def add_patient():
     from forms import PatientForm
     form = PatientForm()
@@ -229,8 +234,8 @@ def add_patient():
     return render_template('add_edit_patient.html', form=form, title="Adicionar Paciente")
 
 @app.route('/patient/<int:patient_id>/edit', methods=['GET', 'POST'])
-# @login_required
-# @access_required
+@login_required
+@access_required
 def edit_patient(patient_id):
     patient = Patient.query.get_or_404(patient_id)
     if patient.clinic_id != current_user.clinic_id: abort(403)
@@ -248,8 +253,8 @@ def edit_patient(patient_id):
     return render_template('add_edit_patient.html', form=form, title="Editar Paciente")
 
 @app.route('/patient/<int:patient_id>/delete', methods=['POST'])
-# @login_required
-# @access_required
+@login_required
+@access_required
 def delete_patient(patient_id):
     patient = Patient.query.get_or_404(patient_id)
     if patient.clinic_id != current_user.clinic_id: abort(403)
@@ -259,8 +264,8 @@ def delete_patient(patient_id):
     return redirect(url_for('list_patients'))
 
 @app.route('/patient/<int:patient_id>')
-# @login_required
-# @access_required
+@login_required
+@access_required
 def patient_detail(patient_id):
     patient = Patient.query.get_or_404(patient_id)
     if patient.clinic_id != current_user.clinic_id: abort(403)
@@ -269,8 +274,8 @@ def patient_detail(patient_id):
     return render_template('patient_detail.html', patient=patient, records=records, assessments=assessments)
 
 @app.route('/patient/<int:patient_id>/add_record', methods=['GET', 'POST'])
-# @login_required
-# @access_required
+@login_required
+@access_required
 def add_record(patient_id):
     patient = Patient.query.get_or_404(patient_id)
     if patient.clinic_id != current_user.clinic_id: abort(403)
@@ -285,8 +290,8 @@ def add_record(patient_id):
     return render_template('add_record.html', form=form, patient=patient, title="Adicionar ao Prontuário")
 
 @app.route('/patient/<int:patient_id>/add_assessment', methods=['GET', 'POST'])
-# @login_required
-# @access_required
+@login_required
+@access_required
 def add_assessment(patient_id):
     patient = Patient.query.get_or_404(patient_id)
     if patient.clinic_id != current_user.clinic_id: abort(403)
@@ -308,16 +313,16 @@ def add_assessment(patient_id):
     return render_template('add_assessment.html', title='Nova Avaliação', form=form, patient=patient)
 
 @app.route('/assessment/<int:assessment_id>')
-# @login_required
-# @access_required
+@login_required
+@access_required
 def view_assessment(assessment_id):
     assessment = Assessment.query.get_or_404(assessment_id)
     if assessment.patient.clinic_id != current_user.clinic_id: abort(403)
     return render_template('view_assessment.html', title='Detalhes da Avaliação', assessment=assessment)
 
 @app.route('/reports')
-# @login_required
-# @access_required
+@login_required
+@access_required
 def reports():
     hoje = date.today()
     start_date_str = request.args.get('start_date')
@@ -344,8 +349,8 @@ def reports():
 
 # --- APIS ---
 @app.route('/api/appointments')
-# @login_required
-# @access_required
+@login_required
+@access_required
 def api_appointments():
     appointments = db.session.query(Appointment).join(User).filter(User.clinic_id == current_user.clinic_id).all()
     status_colors = {'Concluído': '#198754', 'Agendado': '#0dcaf0', 'Cancelado': '#6c757d'}
@@ -355,13 +360,13 @@ def api_appointments():
     return jsonify(eventos)
 
 @app.route('/api/patients')
-# @login_required
+@login_required
 def api_patients():
     patients = Patient.query.filter_by(clinic_id=current_user.clinic_id).order_by(Patient.full_name).all()
     return jsonify([{'id': p.id, 'name': p.full_name} for p in patients])
 
 @app.route('/api/appointment/<int:appointment_id>/<action>', methods=['POST'])
-# @login_required
+@login_required
 def handle_appointment_action(appointment_id, action):
     appointment = db.session.query(Appointment).join(User).filter(Appointment.id == appointment_id, User.clinic_id == current_user.clinic_id).first_or_404()
     if action == 'complete': appointment.status = 'Concluído'; message = 'Agendamento marcado como concluído.'
@@ -372,7 +377,7 @@ def handle_appointment_action(appointment_id, action):
     return jsonify({'status': 'success', 'message': message})
 
 @app.route('/api/appointment/<int:appointment_id>/update', methods=['POST'])
-# @login_required
+@login_required
 def update_appointment(appointment_id):
     appointment = db.session.query(Appointment).join(User).filter(Appointment.id == appointment_id, User.clinic_id == current_user.clinic_id).first_or_404()
     data = request.get_json()
@@ -397,6 +402,7 @@ def init_db_command():
 
 if __name__ == '__main__':
     app.run(debug=True)
+
 
 
 
