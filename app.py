@@ -360,7 +360,7 @@ def reports():
 @admin_required
 def list_staff():
     staff_members = User.query.filter_by(clinic_id=current_user.clinic_id).all()
-    return render_template('list_staff.html', staff_members=staff_members, title="Gerir Equipa")
+    return render_template('list_staff.html', staff_members=staff_members, title="Gerir Profissionais")
 
 @app.route('/staff/add', methods=['GET', 'POST'])
 @login_required
