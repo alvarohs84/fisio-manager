@@ -54,10 +54,10 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     // --- DADOS VINDOS DO BACKEND ---
-    const genderData = {{ gender_data|tojson }};
-    const ageData = {{ age_data|tojson }};
-    const specialtyData = {{ specialty_data|tojson }};
-    const appointmentsData = {{ appointments_data|tojson }};
+    const genderData = {{ gender_data|tojson|safe }};
+    const ageData = {{ age_data|tojson|safe }};
+    const specialtyData = {{ specialty_data|tojson|safe }};
+    const appointmentsData = {{ appointments_data|tojson|safe }};
 
     // --- CONFIGURAÇÃO PADRÃO DOS GRÁFICOS ---
     const defaultOptions = {
@@ -164,3 +164,4 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 {% endblock %}
+
