@@ -1,4 +1,4 @@
-# app.py (COMPLETO E FINAL COM PAGAMENTO ÚNICO)
+# app.py (COMPLETO E COM VERIFICAÇÃO DE ACESSO DESABILITADA PARA TESTES)
 
 import os
 from dotenv import load_dotenv
@@ -19,8 +19,9 @@ from functools import wraps
 
 load_dotenv()
 
+# --- CONFIGURAÇÃO DA APLICAÇÃO ---
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY') or 'uma-chave-secreta-muito-segura'
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY') or 'uma-chave-secreta-muito-segura-e-diferente-para-testes'
 basedir = os.path.abspath(os.path.dirname(__file__))
 render_db_url = os.environ.get('DATABASE_URL')
 if render_db_url and render_db_url.startswith("postgres://"):
@@ -28,6 +29,12 @@ if render_db_url and render_db_url.startswith("postgres://"):
 app.config['SQLALCHEMY_DATABASE_URI'] = render_db_url or 'sqlite:///' + os.path.join(basedir, 'app.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
+# --- IDS DOS PLANOS DO MERCADO PAGO ---
+app.config['MERCADO_PAGO_PLANO_MENSAL_ID'] = os.environ.get('MP_PLANO_MENSAL_ID')
+app.config['MERCADO_PAGO_PLANO_ANUAL_ID'] = os.environ.get('MP_PLANO_ANUAL_ID')
+
+
+# --- INICIALIZAÇÃO DAS EXTENSÕES ---
 from models import db, User, Patient, Appointment, ElectronicRecord, Assessment, UploadedFile, Clinic
 db.init_app(app)
 migrate = Migrate(app, db)
@@ -37,6 +44,7 @@ login_manager.login_view = 'login'
 login_manager.login_message = 'Por favor, faça o login para aceder a esta página.'
 login_manager.login_message_category = 'info'
 
+# --- CONFIGURAÇÃO DOS SDKs ---
 mp_sdk = mercadopago.SDK(os.environ.get("MERCADO_PAGO_ACCESS_TOKEN"))
 cloudinary.config(cloud_name=os.environ.get('CLOUDINARY_CLOUD_NAME'), api_key=os.environ.get('CLOUDINARY_API_KEY'), api_secret=os.environ.get('CLOUDINARY_API_SECRET'), secure=True)
 
@@ -56,6 +64,7 @@ def format_datetime_filter(s, format='%d/%m/%Y'):
     if hasattr(s, 'strftime'): return s.strftime(format)
     return s
 
+# --- DECORADOR PARA VERIFICAR SUBSCRIÇÃO ATIVA ---
 def access_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
@@ -67,14 +76,16 @@ def access_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
-# --- ROTAS DE PAGAMENTO ---
+# --- ROTAS DE PAGAMENTO E SUBSCRIÇÃO ---
 @app.route('/pricing')
-@login_required
+#@login_required # Comentado para testes
 def pricing():
+    # Para testes, se não houver utilizador logado, a página pode não funcionar como esperado.
+    # O ideal é testar o fluxo de pagamento com um utilizador logado.
     return render_template('pricing_checkout_pro.html', title="Passes de Acesso")
 
 @app.route('/create-payment/<plan_type>')
-@login_required
+@login_required # Mantemos o login aqui para saber quem está a comprar
 def create_payment(plan_type):
     if plan_type == 'anual':
         price = 599.00
@@ -186,11 +197,17 @@ def index():
     return render_template('index.html')
 
 @app.route('/dashboard')
-@login_required
-@access_required
+#@login_required
+#@access_required
 def dashboard():
     hoje = date.today()
-    clinic_id = current_user.clinic_id
+    # Para testes sem login, precisamos de um ID de clínica fixo ou de dados de exemplo
+    if current_user.is_authenticated:
+        clinic_id = current_user.clinic_id
+    else:
+        # Se não houver utilizador, não podemos mostrar dados. Redirecionamos para o login.
+        flash("Faça o login para aceder ao seu dashboard.", "info")
+        return redirect(url_for('login'))
 
     gender_data = db.session.query(Patient.gender, func.count(Patient.id)).filter(Patient.clinic_id == clinic_id).group_by(Patient.gender).all()
     gender_chart_data = {label if label else "Não Esp.": count for label, count in gender_data}
