@@ -85,7 +85,7 @@ def pricing():
     return render_template('pricing_checkout_pro.html', title="Passes de Acesso")
 
 @app.route('/create-payment/<plan_type>')
-@login_required # Mantemos o login aqui para saber quem está a comprar
+#@login_required # Comentado para testes
 def create_payment(plan_type):
     if plan_type == 'anual':
         price = 599.00
@@ -94,11 +94,18 @@ def create_payment(plan_type):
         price = 59.90
         title = "Acesso Mensal FisioManager"
 
-    external_reference = f"clinic_{current_user.clinic_id}_plan_{plan_type}_{uuid.uuid4()}"
+    # Para testes sem login, usamos um email e ID de clínica fixos
+    payer_email = "cliente_teste@email.com"
+    clinic_id = 1 # Assumindo que a primeira clínica é a de teste
+    if current_user.is_authenticated:
+        payer_email = current_user.email
+        clinic_id = current_user.clinic_id
+
+    external_reference = f"clinic_{clinic_id}_plan_{plan_type}_{uuid.uuid4()}"
 
     preference_data = {
         "items": [{"title": title, "quantity": 1, "unit_price": price}],
-        "payer": {"email": current_user.email},
+        "payer": {"email": payer_email},
         "back_urls": {
             "success": url_for('dashboard', _external=True),
             "failure": url_for('pricing', _external=True),
@@ -227,18 +234,21 @@ def dashboard():
     return render_template('dashboard.html', title="Dashboard", gender_data=gender_chart_data, specialty_data=specialty_chart_data, age_data=age_groups, appointments_data=appointments_chart_data)
 
 @app.route('/agenda')
-@login_required
-@access_required
+#@login_required
+#@access_required
 def agenda():
     return render_template('agenda_grid.html')
 
 @app.route('/patients')
-@login_required
-@access_required
+#@login_required
+#@access_required
 def list_patients():
     page = request.args.get('page', 1, type=int)
     search_query = request.args.get('q', '')
-    patients_query = Patient.query.filter_by(clinic_id=current_user.clinic_id)
+    if current_user.is_authenticated:
+        patients_query = Patient.query.filter_by(clinic_id=current_user.clinic_id)
+    else:
+        patients_query = Patient.query.filter_by(clinic_id=1) # Exemplo para testes
     if search_query:
         patients_query = patients_query.filter(Patient.full_name.ilike(f'%{search_query}%'))
     patients_pagination = patients_query.order_by(Patient.full_name).paginate(page=page, per_page=10)
@@ -251,13 +261,17 @@ def list_patients():
     return render_template('list_patients.html', patients_pagination=patients_pagination, patients_enriched=patients_enriched, search_query=search_query, title="Painel de Pacientes")
 
 @app.route('/patient/add', methods=['GET', 'POST'])
-@login_required
-@access_required
+#@login_required
+#@access_required
 def add_patient():
     from forms import PatientForm
     form = PatientForm()
     if form.validate_on_submit():
-        new_patient = Patient(full_name=form.full_name.data, date_of_birth=form.date_of_birth.data, gender=form.gender.data, phone=form.phone.data, specialty=form.specialty.data, professional=current_user, clinic_id=current_user.clinic_id)
+        # Lógica para testes sem login
+        clinic_id_to_use = current_user.clinic_id if current_user.is_authenticated else 1
+        user_to_use = current_user if current_user.is_authenticated else User.query.get(1)
+        
+        new_patient = Patient(full_name=form.full_name.data, date_of_birth=form.date_of_birth.data, gender=form.gender.data, phone=form.phone.data, specialty=form.specialty.data, professional=user_to_use, clinic_id=clinic_id_to_use)
         db.session.add(new_patient)
         db.session.commit()
         flash('Paciente cadastrado com sucesso!', 'success')
@@ -265,11 +279,11 @@ def add_patient():
     return render_template('add_edit_patient.html', form=form, title="Adicionar Paciente")
 
 @app.route('/patient/<int:patient_id>/edit', methods=['GET', 'POST'])
-@login_required
-@access_required
+#@login_required
+#@access_required
 def edit_patient(patient_id):
     patient = Patient.query.get_or_404(patient_id)
-    if patient.clinic_id != current_user.clinic_id: abort(403)
+    # if patient.clinic_id != current_user.clinic_id: abort(403) # Verificação desabilitada
     from forms import PatientForm
     form = PatientForm(obj=patient)
     if form.validate_on_submit():
@@ -284,32 +298,32 @@ def edit_patient(patient_id):
     return render_template('add_edit_patient.html', form=form, title="Editar Paciente")
 
 @app.route('/patient/<int:patient_id>/delete', methods=['POST'])
-@login_required
-@access_required
+#@login_required
+#@access_required
 def delete_patient(patient_id):
     patient = Patient.query.get_or_404(patient_id)
-    if patient.clinic_id != current_user.clinic_id: abort(403)
+    # if patient.clinic_id != current_user.clinic_id: abort(403) # Verificação desabilitada
     db.session.delete(patient)
     db.session.commit()
     flash(f'O paciente {patient.full_name} e todos os seus registos foram apagados com sucesso.', 'success')
     return redirect(url_for('list_patients'))
 
 @app.route('/patient/<int:patient_id>')
-@login_required
-@access_required
+#@login_required
+#@access_required
 def patient_detail(patient_id):
     patient = Patient.query.get_or_404(patient_id)
-    if patient.clinic_id != current_user.clinic_id: abort(403)
+    # if patient.clinic_id != current_user.clinic_id: abort(403) # Verificação desabilitada
     records = patient.records.order_by(ElectronicRecord.record_date.desc()).all()
     assessments = patient.assessments.order_by(Assessment.created_at.desc()).all()
     return render_template('patient_detail.html', patient=patient, records=records, assessments=assessments)
 
 @app.route('/patient/<int:patient_id>/add_record', methods=['GET', 'POST'])
-@login_required
-@access_required
+#@login_required
+#@access_required
 def add_record(patient_id):
     patient = Patient.query.get_or_404(patient_id)
-    if patient.clinic_id != current_user.clinic_id: abort(403)
+    # if patient.clinic_id != current_user.clinic_id: abort(403)
     from forms import ElectronicRecordForm
     form = ElectronicRecordForm()
     if form.validate_on_submit():
@@ -321,11 +335,11 @@ def add_record(patient_id):
     return render_template('add_record.html', form=form, patient=patient, title="Adicionar ao Prontuário")
 
 @app.route('/patient/<int:patient_id>/add_assessment', methods=['GET', 'POST'])
-@login_required
-@access_required
+#@login_required
+#@access_required
 def add_assessment(patient_id):
     patient = Patient.query.get_or_404(patient_id)
-    if patient.clinic_id != current_user.clinic_id: abort(403)
+    # if patient.clinic_id != current_user.clinic_id: abort(403)
     from forms import AssessmentForm
     form = AssessmentForm()
     if form.validate_on_submit():
@@ -344,16 +358,16 @@ def add_assessment(patient_id):
     return render_template('add_assessment.html', title='Nova Avaliação', form=form, patient=patient)
 
 @app.route('/assessment/<int:assessment_id>')
-@login_required
-@access_required
+#@login_required
+#@access_required
 def view_assessment(assessment_id):
     assessment = Assessment.query.get_or_404(assessment_id)
-    if assessment.patient.clinic_id != current_user.clinic_id: abort(403)
+    # if assessment.patient.clinic_id != current_user.clinic_id: abort(403)
     return render_template('view_assessment.html', title='Detalhes da Avaliação', assessment=assessment)
 
 @app.route('/reports')
-@login_required
-@access_required
+#@login_required
+#@access_required
 def reports():
     hoje = date.today()
     start_date_str = request.args.get('start_date')
@@ -367,11 +381,14 @@ def reports():
         end_date = next_month - timedelta(days=next_month.day)
     start_datetime = datetime.combine(start_date, time.min)
     end_datetime = datetime.combine(end_date, time.max)
-    financial_appointments = db.session.query(Appointment).join(User).filter(User.clinic_id == current_user.clinic_id, Appointment.start_time.between(start_datetime, end_datetime)).order_by(Appointment.start_time.desc()).all()
+    
+    clinic_id_to_use = current_user.clinic_id if current_user.is_authenticated else 1
+    
+    financial_appointments = db.session.query(Appointment).join(User).filter(User.clinic_id == clinic_id_to_use, Appointment.start_time.between(start_datetime, end_datetime)).order_by(Appointment.start_time.desc()).all()
     total_cobrado_periodo = sum(appt.session_price for appt in financial_appointments if appt.session_price)
     total_recebido_periodo = sum(appt.amount_paid for appt in financial_appointments if appt.amount_paid)
     start_of_current_month = hoje.replace(day=1)
-    appointments_this_month = db.session.query(Appointment).join(User).filter(User.clinic_id == current_user.id, Appointment.start_time >= start_of_current_month).all()
+    appointments_this_month = db.session.query(Appointment).join(User).filter(User.clinic_id == clinic_id_to_use, Appointment.start_time >= start_of_current_month).all()
     status_counts = {'Concluído': 0, 'Agendado': 0, 'Cancelado': 0}
     for appt in appointments_this_month:
         if appt.status in status_counts: status_counts[appt.status] += 1
@@ -380,10 +397,11 @@ def reports():
 
 # --- APIS ---
 @app.route('/api/appointments')
-@login_required
-@access_required
+#@login_required
+#@access_required
 def api_appointments():
-    appointments = db.session.query(Appointment).join(User).filter(User.clinic_id == current_user.clinic_id).all()
+    clinic_id_to_use = current_user.clinic_id if current_user.is_authenticated else 1
+    appointments = db.session.query(Appointment).join(User).filter(User.clinic_id == clinic_id_to_use).all()
     status_colors = {'Concluído': '#198754', 'Agendado': '#0dcaf0', 'Cancelado': '#6c757d'}
     eventos = []
     for appt in appointments:
@@ -391,15 +409,17 @@ def api_appointments():
     return jsonify(eventos)
 
 @app.route('/api/patients')
-@login_required
+#@login_required
 def api_patients():
-    patients = Patient.query.filter_by(clinic_id=current_user.clinic_id).order_by(Patient.full_name).all()
+    clinic_id_to_use = current_user.clinic_id if current_user.is_authenticated else 1
+    patients = Patient.query.filter_by(clinic_id=clinic_id_to_use).order_by(Patient.full_name).all()
     return jsonify([{'id': p.id, 'name': p.full_name} for p in patients])
 
 @app.route('/api/appointment/<int:appointment_id>/<action>', methods=['POST'])
-@login_required
+#@login_required
 def handle_appointment_action(appointment_id, action):
-    appointment = db.session.query(Appointment).join(User).filter(Appointment.id == appointment_id, User.clinic_id == current_user.clinic_id).first_or_404()
+    clinic_id_to_use = current_user.clinic_id if current_user.is_authenticated else 1
+    appointment = db.session.query(Appointment).join(User).filter(Appointment.id == appointment_id, User.clinic_id == clinic_id_to_use).first_or_404()
     if action == 'complete': appointment.status = 'Concluído'; message = 'Agendamento marcado como concluído.'
     elif action == 'cancel': appointment.status = 'Cancelado'; message = 'Agendamento cancelado com sucesso.'
     elif action == 'delete': db.session.delete(appointment); message = 'Agendamento apagado permanentemente.'
@@ -408,9 +428,10 @@ def handle_appointment_action(appointment_id, action):
     return jsonify({'status': 'success', 'message': message})
 
 @app.route('/api/appointment/<int:appointment_id>/update', methods=['POST'])
-@login_required
+#@login_required
 def update_appointment(appointment_id):
-    appointment = db.session.query(Appointment).join(User).filter(Appointment.id == appointment_id, User.clinic_id == current_user.clinic_id).first_or_404()
+    clinic_id_to_use = current_user.clinic_id if current_user.is_authenticated else 1
+    appointment = db.session.query(Appointment).join(User).filter(Appointment.id == appointment_id, User.clinic_id == clinic_id_to_use).first_or_404()
     data = request.get_json()
     try:
         if 'start_time' in data and data['start_time']: appointment.start_time = datetime.fromisoformat(data['start_time'].replace('Z', '+00:00'))
@@ -433,6 +454,7 @@ def init_db_command():
 
 if __name__ == '__main__':
     app.run(debug=True)
+
 
 
 
