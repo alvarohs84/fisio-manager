@@ -2,11 +2,12 @@
 
 {% block styles %}
 <style>
+    /* Estilos para o ícone de pagamento no evento */
     .fc-event-main-frame { display: flex; align-items: center; }
     .payment-icon { margin-left: 8px; font-size: 0.9em; padding: 2px 5px; border-radius: 4px; color: white; }
-    .payment-balance-positive { background-color: #198754; }
-    .payment-balance-negative { background-color: #dc3545; }
-    .payment-balance-zero { background-color: #6c757d; }
+    .payment-balance-positive { background-color: #198754; } /* Verde para crédito */
+    .payment-balance-negative { background-color: #dc3545; } /* Vermelho para débito */
+    .payment-balance-zero { background-color: #6c757d; } /* Cinza para zerado */
     .fc-event.cancelled-event { background-color: #f8f9fa !important; border-color: #d3d3d3 !important; }
     .fc-event.cancelled-event .fc-event-title { text-decoration: line-through; color: #6c757d !important; }
     .fc-event.completed-event { background-color: #d1e7dd !important; border-color: #a3cfbb !important; }
@@ -20,7 +21,8 @@
     <div class="card-body"><div id='calendar'></div></div>
 </div>
 
-<div class="modal fade" id="scheduleModal" tabindex="-1" aria-labelledby="scheduleModalLabel" aria-hidden="true">
+<!-- Modal para NOVO Agendamento -->
+<div class="modal fade" id="scheduleModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog">
     <div class="modal-content">
       <div class="modal-header"><h5 class="modal-title" id="scheduleModalLabel">Novo Agendamento</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
@@ -55,6 +57,7 @@
   </div>
 </div>
 
+<!-- Modal para VER/EDITAR Agendamento Existente -->
 <div class="modal fade" id="viewEventModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-lg">
     <div class="modal-content">
@@ -111,31 +114,14 @@
   </div>
 </div>
 
-<div class="modal fade" id="cancelOptionsModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title">Cancelar Agendamento</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body">
-        <p>Este agendamento parece ser parte de uma série recorrente. Como você deseja cancelar?</p>
-      </div>
-      <div class="modal-footer d-flex justify-content-center">
-        <button type="button" class="btn btn-secondary" id="cancelSingleBtn">Cancelar Apenas Este</button>
-        <button type="button" class="btn btn-warning" id="cancelSeriesBtn">Cancelar Todos os Futuros</button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<div class="modal fade" id="deleteConfirmationModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title text-danger"><i class="bi bi-exclamation-triangle-fill"></i> Confirmar Exclusão Permanente</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><p>Tem a certeza absoluta que deseja <strong>apagar</strong> este atendimento?</p><p class="text-danger"><strong>Atenção:</strong> Esta ação é irreversível.</p></div><div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Não</button><button type="button" class="btn btn-danger" id="confirmDeleteBtn">Sim, apagar</button></div></div></div>
-</div>
+<!-- Outros Modais (cancelamento e apagar) -->
+<div class="modal fade" id="cancelOptionsModal" tabindex="-1" aria-hidden="true"><div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Confirmar Cancelamento</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><p>Este agendamento parece ser parte de uma série recorrente. Como você deseja cancelar?</p></div><div class="modal-footer d-flex justify-content-center"><button type="button" class="btn btn-secondary" id="cancelSingleBtn">Cancelar Apenas Este</button><button type="button" class="btn btn-warning" id="cancelSeriesBtn">Cancelar Todos os Futuros</button></div></div></div></div>
+<div class="modal fade" id="deleteConfirmationModal" tabindex="-1" aria-hidden="true"><div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title text-danger"><i class="bi bi-exclamation-triangle-fill"></i> Confirmar Exclusão Permanente</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><p>Tem a certeza absoluta que deseja <strong>apagar</strong> este atendimento?</p><p class="text-danger"><strong>Atenção:</strong> Esta ação é irreversível.</p></div><div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Não</button><button type="button" class="btn btn-danger" id="confirmDeleteBtn">Sim, apagar</button></div></div></div></div>
 {% endblock %}
 
 
 {% block scripts %}
+{{ super() }}
 <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js'></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
@@ -151,13 +137,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const formatCurrency = (value) => `R$ ${(value || 0).toFixed(2).replace('.', ',')}`;
 
     function sendApiRequest(url, method = 'POST', data = null) {
-        const options = {
-            method: method,
-            headers: { 'Content-Type': 'application/json' },
-        };
-        if (data) {
-            options.body = JSON.stringify(data);
-        }
+        const options = { method, headers: { 'Content-Type': 'application/json' } };
+        if (data) { options.body = JSON.stringify(data); }
         return fetch(url, options);
     }
 
@@ -188,7 +169,16 @@ document.addEventListener('DOMContentLoaded', function() {
     var calendar = new FullCalendar.Calendar(document.getElementById('calendar'), {
         locale: 'pt-br',
         headerToolbar: { left: 'prev,next today', center: 'title', right: 'dayGridMonth,timeGridWeek,timeGridDay' },
-        initialView: 'timeGridWeek',
+        // --- ALTERAÇÃO AQUI ---
+        buttonText: {
+            today:    'Hoje',
+            month:    'Mês',
+            week:     'Semana',
+            day:      'Dia'
+        },
+        allDayText: 'Dia todo',
+        // --- FIM DA ALTERAÇÃO ---
+        initialView: 'dayGridMonth',
         events: '/api/appointments',
         selectable: true,
         eventClassNames: function(arg) {
@@ -197,27 +187,14 @@ document.addEventListener('DOMContentLoaded', function() {
             if (props.status === 'Concluído') return ['completed-event'];
             return [];
         },
-        dateClick: function(info) {
-            document.getElementById('scheduleForm').reset();
-            document.getElementById('recurrenceOptions').style.display = 'none';
-            const clickedDate = info.date;
-            const dateStr = clickedDate.getFullYear() + '-' + String(clickedDate.getMonth() + 1).padStart(2, '0') + '-' + String(clickedDate.getDate()).padStart(2, '0');
-            const timeStr = String(clickedDate.getHours()).padStart(2, '0') + ':' + String(clickedDate.getMinutes()).padStart(2, '0');
-            document.getElementById('dateInput').value = dateStr;
-            document.getElementById('timeInput').value = timeStr;
-            document.getElementById('scheduleModalLabel').textContent = `Novo Agendamento`;
-            fetch('/api/patients').then(res => res.json()).then(patients => {
-                let patientSelect = document.getElementById('patientSelect');
-                patientSelect.innerHTML = ''; patientSelect.appendChild(new Option('-- Selecione --', ''));
-                patients.forEach(p => patientSelect.appendChild(new Option(p.name, p.id)));
-            });
-            scheduleModal.show();
-        },
         eventClick: function(info) {
             currentEventId = info.event.id;
             let props = info.event.extendedProps;
             currentRecurrenceId = props.recurrence_id || null;
             
+            const cancelSeriesBtn = document.getElementById('cancelSeriesBtn');
+            cancelSeriesBtn.style.display = currentRecurrenceId ? 'inline-block' : 'none';
+
             setViewMode(false, props.status);
             
             document.getElementById('viewPatientName').textContent = info.event.title;
@@ -239,13 +216,27 @@ document.addEventListener('DOMContentLoaded', function() {
             
             fetchPatientBalance(props.patient_id);
             viewEventModal.show();
+        },
+        dateClick: function(info) {
+            document.getElementById('scheduleForm').reset();
+            document.getElementById('recurrenceOptions').style.display = 'none';
+            const clickedDate = info.date;
+            const dateStr = clickedDate.getFullYear() + '-' + String(clickedDate.getMonth() + 1).padStart(2, '0') + '-' + String(clickedDate.getDate()).padStart(2, '0');
+            const timeStr = String(clickedDate.getHours()).padStart(2, '0') + ':' + String(clickedDate.getMinutes()).padStart(2, '0');
+            document.getElementById('dateInput').value = dateStr;
+            document.getElementById('timeInput').value = timeStr;
+            document.getElementById('scheduleModalLabel').textContent = `Novo Agendamento`;
+            fetch('/api/patients').then(res => res.json()).then(patients => {
+                let patientSelect = document.getElementById('patientSelect');
+                patientSelect.innerHTML = ''; patientSelect.appendChild(new Option('-- Selecione --', ''));
+                patients.forEach(p => patientSelect.appendChild(new Option(p.name, p.id)));
+            });
+            scheduleModal.show();
         }
     });
     calendar.render();
 
-    // --- EVENT LISTENERS DOS BOTÕES ---
-    document.getElementById('isRecurringCheck').addEventListener('change', function() { document.getElementById('recurrenceOptions').style.display = this.checked ? 'block' : 'none'; });
-
+    // --- EVENT LISTENERS ---
     document.getElementById('saveAppointmentBtn').addEventListener('click', function() {
         const dateValue = document.getElementById('dateInput').value;
         const timeValue = document.getElementById('timeInput').value;
