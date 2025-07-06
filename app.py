@@ -59,15 +59,12 @@ def format_datetime_filter(s, format='%d/%m/%Y'):
 def access_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        # A verificação de acesso está desabilitada para testes.
-        # Lembre-se de reativar em produção, removendo os comentários abaixo.
-        # if not current_user.is_authenticated or not current_user.clinic.access_expires_on or current_user.clinic.access_expires_on < datetime.utcnow():
-        #     flash('O seu acesso expirou ou não está ativo. Por favor, adquira um passe para continuar.', 'warning')
-        #     return redirect(url_for('pricing'))
+        if not current_user.is_authenticated or not current_user.clinic.access_expires_on or current_user.clinic.access_expires_on < datetime.utcnow():
+            flash('O seu acesso expirou ou não está ativo. Por favor, adquira um passe para continuar.', 'warning')
+            return redirect(url_for('pricing'))
         return f(*args, **kwargs)
     return decorated_function
 
-# --- ROTAS DE PAGAMENTO ---
 @app.route('/pricing')
 @login_required
 def pricing():
@@ -141,7 +138,6 @@ def mercadopago_ipn():
                 return "Erro", 500
     return "OK", 200
 
-# --- ROTAS DE AUTENTICAÇÃO ---
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if current_user.is_authenticated: return redirect(url_for('dashboard'))
@@ -180,7 +176,6 @@ def logout():
     logout_user()
     return redirect(url_for('index'))
 
-# --- ROTAS PRINCIPAIS E DE GESTÃO ---
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -402,6 +397,7 @@ def init_db_command():
 
 if __name__ == '__main__':
     app.run(debug=True)
+
 
 
 
