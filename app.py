@@ -201,7 +201,7 @@ def agenda():
 
 @app.route('/patients')
 @login_required
-@access_required
+# @access_required
 def list_patients():
     page = request.args.get('page', 1, type=int)
     search_query = request.args.get('q', '')
