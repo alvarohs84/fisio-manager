@@ -16,11 +16,12 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h1>Dashboard</h1>
-    <!-- FORMULÁRIO DE FILTRO DE MÊS E ANO -->
+    <!-- FORMULÁRIO DE FILTRO DE MÊS E ANO (COM MESES EM PORTUGUÊS) -->
     <form method="GET" action="{{ url_for('dashboard') }}" id="filterForm" class="d-flex align-items-center gap-2">
+        {% set meses = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'] %}
         <select name="month" class="form-select form-select-sm" onchange="this.form.submit()">
-            {% for i in range(1, 13) %}
-                <option value="{{ i }}" {% if i == selected_month %}selected{% endif %}>{{ today.replace(month=i).strftime('%B')|capitalize }}</option>
+            {% for mes in meses %}
+                <option value="{{ loop.index }}" {% if loop.index == selected_month %}selected{% endif %}>{{ mes }}</option>
             {% endfor %}
         </select>
         <select name="year" class="form-select form-select-sm" onchange="this.form.submit()">
@@ -30,6 +31,15 @@
         </select>
     </form>
 </div>
+
+<!-- Div escondida para guardar os dados dos gráficos de forma segura -->
+<div id="chart-data" 
+     data-gender='{{ gender_data|tojson }}'
+     data-age='{{ age_data|tojson }}'
+     data-specialty='{{ specialty_data|tojson }}'
+     style="display: none;">
+</div>
+
 
 <!-- Linha de Gráficos de Perfil de Pacientes -->
 <div class="row">
@@ -69,7 +79,7 @@
     <div class="col-lg-6 mb-4">
         <div class="card shadow-sm h-100">
             <div class="card-body">
-                <h5 class="card-title text-center">Atendimentos Concluídos no Mês Selecionado</h5>
+                <h5 class="card-title text-center">Atendimentos Concluídos no Mês</h5>
                 <div class="table-responsive" style="max-height: 320px;">
                     <table class="table table-striped table-sm">
                         <thead>
@@ -105,9 +115,21 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     // --- DADOS VINDOS DO BACKEND ---
-    const genderData = {{ gender_data|tojson|safe }};
-    const ageData = {{ age_data|tojson|safe }};
-    const specialtyData = {{ specialty_data|tojson|safe }};
+    const chartDataElement = document.getElementById('chart-data');
+    const genderData = JSON.parse(chartDataElement.dataset.gender);
+    const ageData = JSON.parse(chartDataElement.dataset.age);
+    const specialtyData = JSON.parse(chartDataElement.dataset.specialty);
+
+    // --- CONFIGURAÇÃO PADRÃO DOS GRÁFICOS ---
+    const defaultOptions = {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                position: 'bottom',
+            }
+        }
+    };
 
     // --- GRÁFICO DE GÊNERO (PIE) ---
     const genderCtx = document.getElementById('genderChart');
@@ -122,7 +144,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     backgroundColor: ['#0d6efd', '#dc3545', '#6c757d'],
                 }]
             },
-            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+            options: defaultOptions
         });
     }
 
