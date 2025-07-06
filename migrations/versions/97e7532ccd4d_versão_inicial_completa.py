@@ -1,8 +1,8 @@
-"""Versao inicial com multi-tenancy
+"""Versão inicial completa
 
-Revision ID: fd55049e4950
+Revision ID: 97e7532ccd4d
 Revises: 
-Create Date: 2025-06-30 00:50:20.809917
+Create Date: 2025-07-06 17:44:02.354955
 
 """
 from alembic import op
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = 'fd55049e4950'
+revision = '97e7532ccd4d'
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -22,7 +22,7 @@ def upgrade():
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('name', sa.String(length=150), nullable=False),
     sa.Column('created_at', sa.DateTime(), nullable=False),
-    sa.Column('subscription_status', sa.String(length=50), nullable=False),
+    sa.Column('access_expires_on', sa.DateTime(), nullable=True),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_table('user',
@@ -30,6 +30,12 @@ def upgrade():
     sa.Column('name', sa.String(length=100), nullable=False),
     sa.Column('email', sa.String(length=120), nullable=False),
     sa.Column('password_hash', sa.String(length=256), nullable=True),
+    sa.Column('role', sa.String(length=50), nullable=False),
+    sa.Column('date_of_birth', sa.Date(), nullable=True),
+    sa.Column('address', sa.String(length=255), nullable=True),
+    sa.Column('cpf', sa.String(length=20), nullable=True),
+    sa.Column('crefito', sa.String(length=20), nullable=True),
+    sa.Column('phone', sa.String(length=20), nullable=True),
     sa.Column('clinic_id', sa.Integer(), nullable=False),
     sa.ForeignKeyConstraint(['clinic_id'], ['clinic.id'], ),
     sa.PrimaryKeyConstraint('id')
