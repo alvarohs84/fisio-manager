@@ -11,8 +11,6 @@ class Clinic(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(150), nullable=False)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
-    
-    # ESTA É A LINHA CRUCIAL QUE PRECISA DE ESTAR AQUI
     access_expires_on = db.Column(db.DateTime, nullable=True)
 
     users = db.relationship('User', backref='clinic', lazy='dynamic')
@@ -22,13 +20,25 @@ class Clinic(db.Model):
         return f'<Clinic {self.name}>'
 
 class User(UserMixin, db.Model):
+    """Modelo para todos os utilizadores do sistema (Admin, Profissional, Secretária)"""
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     email = db.Column(db.String(120), index=True, unique=True, nullable=False)
     password_hash = db.Column(db.String(256))
+    
+    # NOVOS CAMPOS ADICIONADOS
+    role = db.Column(db.String(50), nullable=False, default='professional') # 'admin', 'professional', 'secretary'
+    date_of_birth = db.Column(db.Date, nullable=True)
+    address = db.Column(db.String(255), nullable=True)
+    cpf = db.Column(db.String(20), nullable=True)
+    crefito = db.Column(db.String(20), nullable=True)
+    phone = db.Column(db.String(20), nullable=True)
+    
     clinic_id = db.Column(db.Integer, db.ForeignKey('clinic.id'), nullable=False)
+    
     patients = db.relationship('Patient', backref='professional', lazy='dynamic', cascade="all, delete-orphan")
     appointments = db.relationship('Appointment', backref='professional', lazy='dynamic', cascade="all, delete-orphan")
+    
     def set_password(self, password): self.password_hash = generate_password_hash(password)
     def check_password(self, password): return check_password_hash(self.password_hash, password)
     def __repr__(self): return f'<User {self.name}>'
@@ -106,3 +116,5 @@ class UploadedFile(db.Model):
     resource_type = db.Column(db.String(50), nullable=False)
     assessment_id = db.Column(db.Integer, db.ForeignKey('assessment.id'), nullable=False)
     def __repr__(self): return f'<File {self.public_id}>'
+
+

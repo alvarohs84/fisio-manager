@@ -76,12 +76,22 @@ def access_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
+# DECORADOR PARA RESTRINGIR ACESSO APENAS A ADMINISTRADORES
+def admin_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        # A verificação de acesso está desabilitada para testes.
+        # if not current_user.is_authenticated or not current_user.role == 'admin':
+        #     flash('Você não tem permissão para aceder a esta página.', 'danger')
+        #     return redirect(url_for('dashboard'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+
 # --- ROTAS DE PAGAMENTO E SUBSCRIÇÃO ---
 @app.route('/pricing')
 #@login_required # Comentado para testes
 def pricing():
-    # Para testes, se não houver utilizador logado, a página pode não funcionar como esperado.
-    # O ideal é testar o fluxo de pagamento com um utilizador logado.
     return render_template('pricing_checkout_pro.html', title="Passes de Acesso")
 
 @app.route('/create-payment/<plan_type>')
@@ -94,9 +104,8 @@ def create_payment(plan_type):
         price = 59.90
         title = "Acesso Mensal FisioManager"
 
-    # Para testes sem login, usamos um email e ID de clínica fixos
     payer_email = "cliente_teste@email.com"
-    clinic_id = 1 # Assumindo que a primeira clínica é a de teste
+    clinic_id = 1 
     if current_user.is_authenticated:
         payer_email = current_user.email
         clinic_id = current_user.clinic_id
@@ -169,13 +178,13 @@ def register():
         new_clinic = Clinic(name=f"Clínica de {form.name.data}")
         db.session.add(new_clinic)
         db.session.commit()
-        user = User(name=form.name.data, email=form.email.data, clinic_id=new_clinic.id)
+        user = User(name=form.name.data, email=form.email.data, clinic_id=new_clinic.id, role='admin')
         user.set_password(form.password.data)
         db.session.add(user)
         db.session.commit()
-        flash('Sua conta foi criada com sucesso! Adquira um passe de acesso para começar.', 'success')
+        flash('Sua conta de administrador foi criada com sucesso!', 'success')
         login_user(user)
-        return redirect(url_for('pricing'))
+        return redirect(url_for('dashboard'))
     return render_template('register.html', title='Registrar', form=form)
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -208,13 +217,9 @@ def index():
 #@access_required
 def dashboard():
     hoje = date.today()
-    # Para testes sem login, precisamos de um ID de clínica fixo ou de dados de exemplo
+    clinic_id = 1 # ID fixo para testes
     if current_user.is_authenticated:
         clinic_id = current_user.clinic_id
-    else:
-        # Se não houver utilizador, não podemos mostrar dados. Redirecionamos para o login.
-        flash("Faça o login para aceder ao seu dashboard.", "info")
-        return redirect(url_for('login'))
 
     gender_data = db.session.query(Patient.gender, func.count(Patient.id)).filter(Patient.clinic_id == clinic_id).group_by(Patient.gender).all()
     gender_chart_data = {label if label else "Não Esp.": count for label, count in gender_data}
@@ -245,10 +250,8 @@ def agenda():
 def list_patients():
     page = request.args.get('page', 1, type=int)
     search_query = request.args.get('q', '')
-    if current_user.is_authenticated:
-        patients_query = Patient.query.filter_by(clinic_id=current_user.clinic_id)
-    else:
-        patients_query = Patient.query.filter_by(clinic_id=1) # Exemplo para testes
+    clinic_id_to_use = current_user.clinic_id if current_user.is_authenticated else 1
+    patients_query = Patient.query.filter_by(clinic_id=clinic_id_to_use)
     if search_query:
         patients_query = patients_query.filter(Patient.full_name.ilike(f'%{search_query}%'))
     patients_pagination = patients_query.order_by(Patient.full_name).paginate(page=page, per_page=10)
@@ -267,10 +270,8 @@ def add_patient():
     from forms import PatientForm
     form = PatientForm()
     if form.validate_on_submit():
-        # Lógica para testes sem login
         clinic_id_to_use = current_user.clinic_id if current_user.is_authenticated else 1
         user_to_use = current_user if current_user.is_authenticated else User.query.get(1)
-        
         new_patient = Patient(full_name=form.full_name.data, date_of_birth=form.date_of_birth.data, gender=form.gender.data, phone=form.phone.data, specialty=form.specialty.data, professional=user_to_use, clinic_id=clinic_id_to_use)
         db.session.add(new_patient)
         db.session.commit()
@@ -283,7 +284,7 @@ def add_patient():
 #@access_required
 def edit_patient(patient_id):
     patient = Patient.query.get_or_404(patient_id)
-    # if patient.clinic_id != current_user.clinic_id: abort(403) # Verificação desabilitada
+    # if patient.clinic_id != current_user.clinic_id: abort(403)
     from forms import PatientForm
     form = PatientForm(obj=patient)
     if form.validate_on_submit():
@@ -302,7 +303,7 @@ def edit_patient(patient_id):
 #@access_required
 def delete_patient(patient_id):
     patient = Patient.query.get_or_404(patient_id)
-    # if patient.clinic_id != current_user.clinic_id: abort(403) # Verificação desabilitada
+    # if patient.clinic_id != current_user.clinic_id: abort(403)
     db.session.delete(patient)
     db.session.commit()
     flash(f'O paciente {patient.full_name} e todos os seus registos foram apagados com sucesso.', 'success')
@@ -313,7 +314,7 @@ def delete_patient(patient_id):
 #@access_required
 def patient_detail(patient_id):
     patient = Patient.query.get_or_404(patient_id)
-    # if patient.clinic_id != current_user.clinic_id: abort(403) # Verificação desabilitada
+    # if patient.clinic_id != current_user.clinic_id: abort(403)
     records = patient.records.order_by(ElectronicRecord.record_date.desc()).all()
     assessments = patient.assessments.order_by(Assessment.created_at.desc()).all()
     return render_template('patient_detail.html', patient=patient, records=records, assessments=assessments)
@@ -454,6 +455,7 @@ def init_db_command():
 
 if __name__ == '__main__':
     app.run(debug=True)
+
 
 
 
