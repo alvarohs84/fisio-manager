@@ -1,9 +1,31 @@
 {% extends "base.html" %}
 
+{% block styles %}
+{{ super() }}
+<style>
+    /* Define uma altura fixa para os contentores dos gráficos */
+    .chart-container {
+        position: relative;
+        height: 350px; /* Altura ideal para os gráficos do dashboard */
+        width: 100%;
+    }
+</style>
+{% endblock %}
+
+
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h1>Dashboard</h1>
     <span class="text-muted">Mês de Referência: {{ today.strftime('%B de %Y')|capitalize }}</span>
+</div>
+
+<!-- Div escondida para guardar os dados dos gráficos de forma segura -->
+<div id="chart-data" 
+     data-gender='{{ gender_data|tojson }}'
+     data-age='{{ age_data|tojson }}'
+     data-specialty='{{ specialty_data|tojson }}'
+     data-appointments='{{ appointments_data|tojson }}'
+     style="display: none;">
 </div>
 
 <!-- Linha de Gráficos de Perfil de Pacientes -->
@@ -12,7 +34,9 @@
         <div class="card shadow-sm h-100">
             <div class="card-body">
                 <h5 class="card-title text-center">Distribuição por Gênero</h5>
-                <canvas id="genderChart"></canvas>
+                <div class="chart-container">
+                    <canvas id="genderChart"></canvas>
+                </div>
             </div>
         </div>
     </div>
@@ -20,7 +44,9 @@
         <div class="card shadow-sm h-100">
             <div class="card-body">
                 <h5 class="card-title text-center">Distribuição por Faixa Etária</h5>
-                <canvas id="ageChart"></canvas>
+                <div class="chart-container">
+                    <canvas id="ageChart"></canvas>
+                </div>
             </div>
         </div>
     </div>
@@ -28,7 +54,9 @@
         <div class="card shadow-sm h-100">
             <div class="card-body">
                 <h5 class="card-title text-center">Pacientes por Especialidade</h5>
-                <canvas id="specialtyChart"></canvas>
+                <div class="chart-container">
+                    <canvas id="specialtyChart"></canvas>
+                </div>
             </div>
         </div>
     </div>
@@ -40,7 +68,9 @@
         <div class="card shadow-sm">
             <div class="card-body">
                 <h5 class="card-title text-center">Top 10 Pacientes com Mais Atendimentos no Mês</h5>
-                <canvas id="appointmentsChart"></canvas>
+                <div class="chart-container">
+                    <canvas id="appointmentsChart"></canvas>
+                </div>
             </div>
         </div>
     </div>
@@ -54,10 +84,12 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     // --- DADOS VINDOS DO BACKEND ---
-    const genderData = {{ gender_data|tojson|safe }};
-    const ageData = {{ age_data|tojson|safe }};
-    const specialtyData = {{ specialty_data|tojson|safe }};
-    const appointmentsData = {{ appointments_data|tojson|safe }};
+    // Lemos os dados a partir dos atributos da div escondida
+    const chartDataElement = document.getElementById('chart-data');
+    const genderData = JSON.parse(chartDataElement.dataset.gender);
+    const ageData = JSON.parse(chartDataElement.dataset.age);
+    const specialtyData = JSON.parse(chartDataElement.dataset.specialty);
+    const appointmentsData = JSON.parse(chartDataElement.dataset.appointments);
 
     // --- CONFIGURAÇÃO PADRÃO DOS GRÁFICOS ---
     const defaultOptions = {
@@ -164,6 +196,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 {% endblock %}
+
 
 
 
