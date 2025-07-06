@@ -38,7 +38,7 @@
                         
                         <!-- Condição para mostrar o link "Equipa" apenas para administradores -->
                         {% if current_user.role == 'admin' %}
-                            <li class="nav-item"><a class="nav-link navbar-custom-link" href="{{ url_for('list_staff') }}">Equipe</a></li>
+                            <li class="nav-item"><a class="nav-link navbar-custom-link" href="{{ url_for('list_staff') }}">Equipa</a></li>
                         {% endif %}
                         
                         <li class="nav-item"><a class="nav-link navbar-custom-link" href="{{ url_for('reports') }}">Relatórios</a></li>
@@ -78,6 +78,7 @@
     {% block scripts %}{% endblock %}
 </body>
 </html>
+
 
 
 

@@ -1,4 +1,4 @@
-# app.py (COMPLETO E COM VERIFICAÇÃO DE ACESSO DESABILITADA PARA TESTES)
+# app.py
 
 import os
 from dotenv import load_dotenv
@@ -19,9 +19,8 @@ from functools import wraps
 
 load_dotenv()
 
-# --- CONFIGURAÇÃO DA APLICAÇÃO ---
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY') or 'uma-chave-secreta-muito-segura-e-diferente-para-testes'
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY') or 'uma-chave-secreta-muito-segura'
 basedir = os.path.abspath(os.path.dirname(__file__))
 render_db_url = os.environ.get('DATABASE_URL')
 if render_db_url and render_db_url.startswith("postgres://"):
@@ -29,12 +28,6 @@ if render_db_url and render_db_url.startswith("postgres://"):
 app.config['SQLALCHEMY_DATABASE_URI'] = render_db_url or 'sqlite:///' + os.path.join(basedir, 'app.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# --- IDS DOS PLANOS DO MERCADO PAGO ---
-app.config['MERCADO_PAGO_PLANO_MENSAL_ID'] = os.environ.get('MP_PLANO_MENSAL_ID')
-app.config['MERCADO_PAGO_PLANO_ANUAL_ID'] = os.environ.get('MP_PLANO_ANUAL_ID')
-
-
-# --- INICIALIZAÇÃO DAS EXTENSÕES ---
 from models import db, User, Patient, Appointment, ElectronicRecord, Assessment, UploadedFile, Clinic
 db.init_app(app)
 migrate = Migrate(app, db)
@@ -44,7 +37,6 @@ login_manager.login_view = 'login'
 login_manager.login_message = 'Por favor, faça o login para aceder a esta página.'
 login_manager.login_message_category = 'info'
 
-# --- CONFIGURAÇÃO DOS SDKs ---
 mp_sdk = mercadopago.SDK(os.environ.get("MERCADO_PAGO_ACCESS_TOKEN"))
 cloudinary.config(cloud_name=os.environ.get('CLOUDINARY_CLOUD_NAME'), api_key=os.environ.get('CLOUDINARY_API_KEY'), api_secret=os.environ.get('CLOUDINARY_API_SECRET'), secure=True)
 
@@ -64,38 +56,32 @@ def format_datetime_filter(s, format='%d/%m/%Y'):
     if hasattr(s, 'strftime'): return s.strftime(format)
     return s
 
-# --- DECORADOR PARA VERIFICAR SUBSCRIÇÃO ATIVA ---
 def access_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        # A verificação de acesso está desabilitada para testes.
-        # Lembre-se de reativar em produção, removendo os comentários abaixo.
-        # if not current_user.is_authenticated or not current_user.clinic.access_expires_on or current_user.clinic.access_expires_on < datetime.utcnow():
-        #     flash('O seu acesso expirou ou não está ativo. Por favor, adquira um passe para continuar.', 'warning')
-        #     return redirect(url_for('pricing'))
+        if not current_user.is_authenticated or not current_user.clinic.access_expires_on or current_user.clinic.access_expires_on < datetime.utcnow():
+            flash('O seu acesso expirou ou não está ativo. Por favor, adquira um passe para continuar.', 'warning')
+            return redirect(url_for('pricing'))
         return f(*args, **kwargs)
     return decorated_function
 
-# DECORADOR PARA RESTRINGIR ACESSO APENAS A ADMINISTRADORES
 def admin_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        # A verificação de acesso está desabilitada para testes.
-        # if not current_user.is_authenticated or not current_user.role == 'admin':
-        #     flash('Você não tem permissão para aceder a esta página.', 'danger')
-        #     return redirect(url_for('dashboard'))
+        if not current_user.is_authenticated or current_user.role != 'admin':
+            flash('Você não tem permissão para aceder a esta página.', 'danger')
+            return redirect(url_for('dashboard'))
         return f(*args, **kwargs)
     return decorated_function
 
-
 # --- ROTAS DE PAGAMENTO E SUBSCRIÇÃO ---
 @app.route('/pricing')
-#@login_required # Comentado para testes
+@login_required
 def pricing():
     return render_template('pricing_checkout_pro.html', title="Passes de Acesso")
 
 @app.route('/create-payment/<plan_type>')
-#@login_required # Comentado para testes
+@login_required
 def create_payment(plan_type):
     if plan_type == 'anual':
         price = 599.00
@@ -104,17 +90,11 @@ def create_payment(plan_type):
         price = 59.90
         title = "Acesso Mensal FisioManager"
 
-    payer_email = "cliente_teste@email.com"
-    clinic_id = 1 
-    if current_user.is_authenticated:
-        payer_email = current_user.email
-        clinic_id = current_user.clinic_id
-
-    external_reference = f"clinic_{clinic_id}_plan_{plan_type}_{uuid.uuid4()}"
+    external_reference = f"clinic_{current_user.clinic_id}_plan_{plan_type}_{uuid.uuid4()}"
 
     preference_data = {
         "items": [{"title": title, "quantity": 1, "unit_price": price}],
-        "payer": {"email": payer_email},
+        "payer": {"email": current_user.email},
         "back_urls": {
             "success": url_for('dashboard', _external=True),
             "failure": url_for('pricing', _external=True),
@@ -213,45 +193,28 @@ def index():
     return render_template('index.html')
 
 @app.route('/dashboard')
-#@login_required
-#@access_required
+@login_required
+@access_required
 def dashboard():
-    hoje = date.today()
-    clinic_id = 1 # ID fixo para testes
-    if current_user.is_authenticated:
-        clinic_id = current_user.clinic_id
-
-    gender_data = db.session.query(Patient.gender, func.count(Patient.id)).filter(Patient.clinic_id == clinic_id).group_by(Patient.gender).all()
-    gender_chart_data = {label if label else "Não Esp.": count for label, count in gender_data}
-    specialty_data = db.session.query(Patient.specialty, func.count(Patient.id)).filter(Patient.clinic_id == clinic_id).group_by(Patient.specialty).all()
-    specialty_chart_data = {label if label else "N/A": count for label, count in specialty_data}
-    patients_for_age = Patient.query.filter_by(clinic_id=clinic_id).all()
-    age_groups = {"0-18": 0, "19-30": 0, "31-50": 0, "51+": 0}
-    for patient in patients_for_age:
-        age = patient.age
-        if age <= 18: age_groups["0-18"] += 1
-        elif age <= 30: age_groups["19-30"] += 1
-        elif age <= 50: age_groups["31-50"] += 1
-        else: age_groups["51+"] += 1
-    start_of_month = hoje.replace(day=1)
-    appointments_per_patient = db.session.query(Patient.full_name, func.count(Appointment.id)).join(Appointment).filter(Patient.clinic_id == clinic_id, Appointment.status == 'Concluído', extract('month', Appointment.start_time) == hoje.month, extract('year', Appointment.start_time) == hoje.year).group_by(Patient.full_name).order_by(func.count(Appointment.id).desc()).limit(10).all()
-    appointments_chart_data = {name: count for name, count in appointments_per_patient}
-    return render_template('dashboard.html', title="Dashboard", gender_data=gender_chart_data, specialty_data=specialty_chart_data, age_data=age_groups, appointments_data=appointments_chart_data)
+    hoje = datetime.utcnow()
+    proximos_agendamentos = Appointment.query.join(User).filter(User.clinic_id == current_user.clinic_id, Appointment.start_time >= hoje).order_by(Appointment.start_time.asc()).limit(5).all()
+    ultimos_pacientes = Patient.query.filter_by(clinic_id=current_user.clinic_id).order_by(Patient.created_at.desc()).limit(5).all()
+    aniversariantes_do_mes = Patient.query.filter(Patient.clinic_id == current_user.clinic_id, extract('month', Patient.date_of_birth) == hoje.month).order_by(extract('day', Patient.date_of_birth).asc()).all()
+    return render_template('dashboard.html', proximos_agendamentos=proximos_agendamentos, ultimos_pacientes=ultimos_pacientes, aniversariantes_do_mes=aniversariantes_do_mes)
 
 @app.route('/agenda')
-#@login_required
-#@access_required
+@login_required
+@access_required
 def agenda():
     return render_template('agenda_grid.html')
 
 @app.route('/patients')
-#@login_required
-#@access_required
+@login_required
+@access_required
 def list_patients():
     page = request.args.get('page', 1, type=int)
     search_query = request.args.get('q', '')
-    clinic_id_to_use = current_user.clinic_id if current_user.is_authenticated else 1
-    patients_query = Patient.query.filter_by(clinic_id=clinic_id_to_use)
+    patients_query = Patient.query.filter_by(clinic_id=current_user.clinic_id)
     if search_query:
         patients_query = patients_query.filter(Patient.full_name.ilike(f'%{search_query}%'))
     patients_pagination = patients_query.order_by(Patient.full_name).paginate(page=page, per_page=10)
@@ -264,15 +227,13 @@ def list_patients():
     return render_template('list_patients.html', patients_pagination=patients_pagination, patients_enriched=patients_enriched, search_query=search_query, title="Painel de Pacientes")
 
 @app.route('/patient/add', methods=['GET', 'POST'])
-#@login_required
-#@access_required
+@login_required
+@access_required
 def add_patient():
     from forms import PatientForm
     form = PatientForm()
     if form.validate_on_submit():
-        clinic_id_to_use = current_user.clinic_id if current_user.is_authenticated else 1
-        user_to_use = current_user if current_user.is_authenticated else User.query.get(1)
-        new_patient = Patient(full_name=form.full_name.data, date_of_birth=form.date_of_birth.data, gender=form.gender.data, phone=form.phone.data, specialty=form.specialty.data, professional=user_to_use, clinic_id=clinic_id_to_use)
+        new_patient = Patient(full_name=form.full_name.data, date_of_birth=form.date_of_birth.data, gender=form.gender.data, phone=form.phone.data, specialty=form.specialty.data, professional=current_user, clinic_id=current_user.clinic_id)
         db.session.add(new_patient)
         db.session.commit()
         flash('Paciente cadastrado com sucesso!', 'success')
@@ -280,11 +241,11 @@ def add_patient():
     return render_template('add_edit_patient.html', form=form, title="Adicionar Paciente")
 
 @app.route('/patient/<int:patient_id>/edit', methods=['GET', 'POST'])
-#@login_required
-#@access_required
+@login_required
+@access_required
 def edit_patient(patient_id):
     patient = Patient.query.get_or_404(patient_id)
-    # if patient.clinic_id != current_user.clinic_id: abort(403)
+    if patient.clinic_id != current_user.clinic_id: abort(403)
     from forms import PatientForm
     form = PatientForm(obj=patient)
     if form.validate_on_submit():
@@ -299,32 +260,32 @@ def edit_patient(patient_id):
     return render_template('add_edit_patient.html', form=form, title="Editar Paciente")
 
 @app.route('/patient/<int:patient_id>/delete', methods=['POST'])
-#@login_required
-#@access_required
+@login_required
+@access_required
 def delete_patient(patient_id):
     patient = Patient.query.get_or_404(patient_id)
-    # if patient.clinic_id != current_user.clinic_id: abort(403)
+    if patient.clinic_id != current_user.clinic_id: abort(403)
     db.session.delete(patient)
     db.session.commit()
     flash(f'O paciente {patient.full_name} e todos os seus registos foram apagados com sucesso.', 'success')
     return redirect(url_for('list_patients'))
 
 @app.route('/patient/<int:patient_id>')
-#@login_required
-#@access_required
+@login_required
+@access_required
 def patient_detail(patient_id):
     patient = Patient.query.get_or_404(patient_id)
-    # if patient.clinic_id != current_user.clinic_id: abort(403)
+    if patient.clinic_id != current_user.clinic_id: abort(403)
     records = patient.records.order_by(ElectronicRecord.record_date.desc()).all()
     assessments = patient.assessments.order_by(Assessment.created_at.desc()).all()
     return render_template('patient_detail.html', patient=patient, records=records, assessments=assessments)
 
 @app.route('/patient/<int:patient_id>/add_record', methods=['GET', 'POST'])
-#@login_required
-#@access_required
+@login_required
+@access_required
 def add_record(patient_id):
     patient = Patient.query.get_or_404(patient_id)
-    # if patient.clinic_id != current_user.clinic_id: abort(403)
+    if patient.clinic_id != current_user.clinic_id: abort(403)
     from forms import ElectronicRecordForm
     form = ElectronicRecordForm()
     if form.validate_on_submit():
@@ -336,11 +297,11 @@ def add_record(patient_id):
     return render_template('add_record.html', form=form, patient=patient, title="Adicionar ao Prontuário")
 
 @app.route('/patient/<int:patient_id>/add_assessment', methods=['GET', 'POST'])
-#@login_required
-#@access_required
+@login_required
+@access_required
 def add_assessment(patient_id):
     patient = Patient.query.get_or_404(patient_id)
-    # if patient.clinic_id != current_user.clinic_id: abort(403)
+    if patient.clinic_id != current_user.clinic_id: abort(403)
     from forms import AssessmentForm
     form = AssessmentForm()
     if form.validate_on_submit():
@@ -359,16 +320,16 @@ def add_assessment(patient_id):
     return render_template('add_assessment.html', title='Nova Avaliação', form=form, patient=patient)
 
 @app.route('/assessment/<int:assessment_id>')
-#@login_required
-#@access_required
+@login_required
+@access_required
 def view_assessment(assessment_id):
     assessment = Assessment.query.get_or_404(assessment_id)
-    # if assessment.patient.clinic_id != current_user.clinic_id: abort(403)
+    if assessment.patient.clinic_id != current_user.clinic_id: abort(403)
     return render_template('view_assessment.html', title='Detalhes da Avaliação', assessment=assessment)
 
 @app.route('/reports')
-#@login_required
-#@access_required
+@login_required
+@access_required
 def reports():
     hoje = date.today()
     start_date_str = request.args.get('start_date')
@@ -382,27 +343,105 @@ def reports():
         end_date = next_month - timedelta(days=next_month.day)
     start_datetime = datetime.combine(start_date, time.min)
     end_datetime = datetime.combine(end_date, time.max)
-    
-    clinic_id_to_use = current_user.clinic_id if current_user.is_authenticated else 1
-    
-    financial_appointments = db.session.query(Appointment).join(User).filter(User.clinic_id == clinic_id_to_use, Appointment.start_time.between(start_datetime, end_datetime)).order_by(Appointment.start_time.desc()).all()
+    financial_appointments = db.session.query(Appointment).join(User).filter(User.clinic_id == current_user.clinic_id, Appointment.start_time.between(start_datetime, end_datetime)).order_by(Appointment.start_time.desc()).all()
     total_cobrado_periodo = sum(appt.session_price for appt in financial_appointments if appt.session_price)
     total_recebido_periodo = sum(appt.amount_paid for appt in financial_appointments if appt.amount_paid)
     start_of_current_month = hoje.replace(day=1)
-    appointments_this_month = db.session.query(Appointment).join(User).filter(User.clinic_id == clinic_id_to_use, Appointment.start_time >= start_of_current_month).all()
+    appointments_this_month = db.session.query(Appointment).join(User).filter(User.clinic_id == current_user.id, Appointment.start_time >= start_of_current_month).all()
     status_counts = {'Concluído': 0, 'Agendado': 0, 'Cancelado': 0}
     for appt in appointments_this_month:
         if appt.status in status_counts: status_counts[appt.status] += 1
     return render_template('reports.html', financial_appointments=financial_appointments, total_cobrado=total_cobrado_periodo, total_recebido=total_recebido_periodo, start_date=start_date.strftime('%Y-%m-%d'), end_date=end_date.strftime('%Y-%m-%d'), status_counts=status_counts)
 
+# --- ROTAS DE GESTÃO DE EQUIPA ---
+@app.route('/staff')
+@login_required
+@access_required
+@admin_required
+def list_staff():
+    staff_members = User.query.filter_by(clinic_id=current_user.clinic_id).all()
+    return render_template('list_staff.html', staff_members=staff_members, title="Gerir Equipa")
+
+@app.route('/staff/add', methods=['GET', 'POST'])
+@login_required
+@access_required
+@admin_required
+def add_staff():
+    from forms import StaffForm
+    form = StaffForm()
+    if form.validate_on_submit():
+        new_staff = User(
+            name=form.name.data,
+            email=form.email.data,
+            role=form.role.data,
+            date_of_birth=form.date_of_birth.data,
+            cpf=form.cpf.data,
+            address=form.address.data,
+            phone=form.phone.data,
+            crefito=form.crefito.data,
+            clinic_id=current_user.clinic_id
+        )
+        if form.password.data:
+            new_staff.set_password(form.password.data)
+        else:
+            new_staff.set_password('fisiomanager123')
+        
+        db.session.add(new_staff)
+        db.session.commit()
+        flash('Novo membro da equipa adicionado com sucesso!', 'success')
+        return redirect(url_for('list_staff'))
+    return render_template('add_edit_staff.html', form=form, title="Adicionar Membro")
+
+@app.route('/staff/<int:staff_id>/edit', methods=['GET', 'POST'])
+@login_required
+@access_required
+@admin_required
+def edit_staff(staff_id):
+    staff_member = User.query.get_or_404(staff_id)
+    if staff_member.clinic_id != current_user.clinic_id:
+        abort(403)
+    
+    from forms import StaffForm
+    form = StaffForm(obj=staff_member)
+    if form.validate_on_submit():
+        staff_member.name = form.name.data
+        staff_member.email = form.email.data
+        staff_member.role = form.role.data
+        staff_member.date_of_birth = form.date_of_birth.data
+        staff_member.cpf = form.cpf.data
+        staff_member.address = form.address.data
+        staff_member.phone = form.phone.data
+        staff_member.crefito = form.crefito.data
+        if form.password.data:
+            staff_member.set_password(form.password.data)
+        db.session.commit()
+        flash('Dados do membro da equipa atualizados com sucesso!', 'success')
+        return redirect(url_for('list_staff'))
+        
+    return render_template('add_edit_staff.html', form=form, title="Editar Membro")
+
+@app.route('/staff/<int:staff_id>/delete', methods=['POST'])
+@login_required
+@access_required
+@admin_required
+def delete_staff(staff_id):
+    staff_member = User.query.get_or_404(staff_id)
+    if staff_member.clinic_id != current_user.clinic_id or staff_member.id == current_user.id:
+        flash('Não é possível apagar a sua própria conta de administrador.', 'danger')
+        return redirect(url_for('list_staff'))
+    
+    db.session.delete(staff_member)
+    db.session.commit()
+    flash('Membro da equipa apagado com sucesso.', 'success')
+    return redirect(url_for('list_staff'))
+
 
 # --- APIS ---
 @app.route('/api/appointments')
-#@login_required
-#@access_required
+@login_required
+@access_required
 def api_appointments():
-    clinic_id_to_use = current_user.clinic_id if current_user.is_authenticated else 1
-    appointments = db.session.query(Appointment).join(User).filter(User.clinic_id == clinic_id_to_use).all()
+    appointments = db.session.query(Appointment).join(User).filter(User.clinic_id == current_user.clinic_id).all()
     status_colors = {'Concluído': '#198754', 'Agendado': '#0dcaf0', 'Cancelado': '#6c757d'}
     eventos = []
     for appt in appointments:
@@ -410,17 +449,15 @@ def api_appointments():
     return jsonify(eventos)
 
 @app.route('/api/patients')
-#@login_required
+@login_required
 def api_patients():
-    clinic_id_to_use = current_user.clinic_id if current_user.is_authenticated else 1
-    patients = Patient.query.filter_by(clinic_id=clinic_id_to_use).order_by(Patient.full_name).all()
+    patients = Patient.query.filter_by(clinic_id=current_user.clinic_id).order_by(Patient.full_name).all()
     return jsonify([{'id': p.id, 'name': p.full_name} for p in patients])
 
 @app.route('/api/appointment/<int:appointment_id>/<action>', methods=['POST'])
-#@login_required
+@login_required
 def handle_appointment_action(appointment_id, action):
-    clinic_id_to_use = current_user.clinic_id if current_user.is_authenticated else 1
-    appointment = db.session.query(Appointment).join(User).filter(Appointment.id == appointment_id, User.clinic_id == clinic_id_to_use).first_or_404()
+    appointment = db.session.query(Appointment).join(User).filter(Appointment.id == appointment_id, User.clinic_id == current_user.clinic_id).first_or_404()
     if action == 'complete': appointment.status = 'Concluído'; message = 'Agendamento marcado como concluído.'
     elif action == 'cancel': appointment.status = 'Cancelado'; message = 'Agendamento cancelado com sucesso.'
     elif action == 'delete': db.session.delete(appointment); message = 'Agendamento apagado permanentemente.'
@@ -429,10 +466,9 @@ def handle_appointment_action(appointment_id, action):
     return jsonify({'status': 'success', 'message': message})
 
 @app.route('/api/appointment/<int:appointment_id>/update', methods=['POST'])
-#@login_required
+@login_required
 def update_appointment(appointment_id):
-    clinic_id_to_use = current_user.clinic_id if current_user.is_authenticated else 1
-    appointment = db.session.query(Appointment).join(User).filter(Appointment.id == appointment_id, User.clinic_id == clinic_id_to_use).first_or_404()
+    appointment = db.session.query(Appointment).join(User).filter(Appointment.id == appointment_id, User.clinic_id == current_user.clinic_id).first_or_404()
     data = request.get_json()
     try:
         if 'start_time' in data and data['start_time']: appointment.start_time = datetime.fromisoformat(data['start_time'].replace('Z', '+00:00'))
@@ -455,6 +491,7 @@ def init_db_command():
 
 if __name__ == '__main__':
     app.run(debug=True)
+
 
 
 
