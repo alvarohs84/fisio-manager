@@ -6,6 +6,15 @@
     <span class="text-muted">Mês de Referência: {{ today.strftime('%B de %Y')|capitalize }}</span>
 </div>
 
+<!-- Divs escondidas para guardar os dados dos gráficos -->
+<div id="chart-data" 
+     data-gender='{{ gender_data|tojson }}'
+     data-age='{{ age_data|tojson }}'
+     data-specialty='{{ specialty_data|tojson }}'
+     data-appointments='{{ appointments_data|tojson }}'
+     style="display: none;">
+</div>
+
 <!-- Linha de Gráficos de Perfil de Pacientes -->
 <div class="row">
     <div class="col-md-6 col-lg-4 mb-4">
@@ -54,10 +63,12 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     // --- DADOS VINDOS DO BACKEND ---
-    const genderData = {{ gender_data|tojson|safe }};
-    const ageData = {{ age_data|tojson|safe }};
-    const specialtyData = {{ specialty_data|tojson|safe }};
-    const appointmentsData = {{ appointments_data|tojson|safe }};
+    // Lemos os dados a partir dos atributos da div escondida
+    const chartDataElement = document.getElementById('chart-data');
+    const genderData = JSON.parse(chartDataElement.dataset.gender);
+    const ageData = JSON.parse(chartDataElement.dataset.age);
+    const specialtyData = JSON.parse(chartDataElement.dataset.specialty);
+    const appointmentsData = JSON.parse(chartDataElement.dataset.appointments);
 
     // --- CONFIGURAÇÃO PADRÃO DOS GRÁFICOS ---
     const defaultOptions = {
@@ -164,4 +175,5 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 {% endblock %}
+
 
