@@ -65,7 +65,6 @@ def access_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
-# --- ROTAS DE PAGAMENTO ---
 @app.route('/pricing')
 @login_required
 def pricing():
@@ -139,7 +138,6 @@ def mercadopago_ipn():
                 return "Erro", 500
     return "OK", 200
 
-# --- ROTAS DE AUTENTICAÇÃO ---
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if current_user.is_authenticated: return redirect(url_for('dashboard'))
@@ -178,7 +176,6 @@ def logout():
     logout_user()
     return redirect(url_for('index'))
 
-# --- ROTAS PRINCIPAIS E DE GESTÃO ---
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -200,8 +197,8 @@ def agenda():
     return render_template('agenda_grid.html')
 
 @app.route('/patients')
-# @login_required 
-# @access_required 
+# @login_required
+# @access_required
 def list_patients():
     page = request.args.get('page', 1, type=int)
     search_query = request.args.get('q', '')
@@ -400,6 +397,7 @@ def init_db_command():
 
 if __name__ == '__main__':
     app.run(debug=True)
+
 
 
 
