@@ -1,5 +1,3 @@
-# forms.py
-
 from flask_wtf import FlaskForm
 from wtforms import StringField, PasswordField, SubmitField, BooleanField, DateField, TimeField, SelectField, IntegerField, TextAreaField, MultipleFileField, RadioField
 from wtforms.validators import DataRequired, Email, EqualTo, ValidationError, Optional
@@ -60,7 +58,8 @@ class PatientForm(FlaskForm):
             ('Traumato-Ortopédica', 'Traumato-Ortopédica'),
             ('Osteopatia', 'Osteopatia'),
             ('Quiropraxia', 'Quiropraxia'),
-            ('Saúde da Mulher', 'Saúde da Mulher')
+            ('Saúde da Mulher', 'Saúde da Mulher'),
+            ('Pilates', 'Pilates')
         ],
         validators=[Optional()]
     )

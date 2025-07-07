@@ -1,5 +1,3 @@
-# app.py (COMPLETO E COM VERIFICAÇÃO DE ACESSO DESABILITADA PARA TESTES)
-
 import os
 from dotenv import load_dotenv
 import uuid
@@ -19,9 +17,8 @@ from functools import wraps
 
 load_dotenv()
 
-# --- CONFIGURAÇÃO DA APLICAÇÃO ---
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY') or 'uma-chave-secreta-muito-segura-e-diferente-para-testes'
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY') or 'uma-chave-secreta-muito-segura'
 basedir = os.path.abspath(os.path.dirname(__file__))
 render_db_url = os.environ.get('DATABASE_URL')
 if render_db_url and render_db_url.startswith("postgres://"):
@@ -29,12 +26,6 @@ if render_db_url and render_db_url.startswith("postgres://"):
 app.config['SQLALCHEMY_DATABASE_URI'] = render_db_url or 'sqlite:///' + os.path.join(basedir, 'app.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# --- IDS DOS PLANOS DO MERCADO PAGO ---
-app.config['MERCADO_PAGO_PLANO_MENSAL_ID'] = os.environ.get('MP_PLANO_MENSAL_ID')
-app.config['MERCADO_PAGO_PLANO_ANUAL_ID'] = os.environ.get('MP_PLANO_ANUAL_ID')
-
-
-# --- INICIALIZAÇÃO DAS EXTENSÕES ---
 from models import db, User, Patient, Appointment, ElectronicRecord, Assessment, UploadedFile, Clinic
 db.init_app(app)
 migrate = Migrate(app, db)
@@ -44,7 +35,6 @@ login_manager.login_view = 'login'
 login_manager.login_message = 'Por favor, faça o login para aceder a esta página.'
 login_manager.login_message_category = 'info'
 
-# --- CONFIGURAÇÃO DOS SDKs ---
 mp_sdk = mercadopago.SDK(os.environ.get("MERCADO_PAGO_ACCESS_TOKEN"))
 cloudinary.config(cloud_name=os.environ.get('CLOUDINARY_CLOUD_NAME'), api_key=os.environ.get('CLOUDINARY_API_KEY'), api_secret=os.environ.get('CLOUDINARY_API_SECRET'), secure=True)
 
@@ -64,25 +54,18 @@ def format_datetime_filter(s, format='%d/%m/%Y'):
     if hasattr(s, 'strftime'): return s.strftime(format)
     return s
 
-# --- DECORADORES DE ACESSO (DESABILITADOS PARA TESTE) ---
 def access_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        # A verificação de acesso está desabilitada para testes.
-        # Lembre-se de reativar em produção, removendo os comentários abaixo.
-        # if not current_user.is_authenticated or not current_user.clinic.access_expires_on or current_user.clinic.access_expires_on < datetime.utcnow():
-        #     flash('O seu acesso expirou ou não está ativo. Por favor, adquira um passe para continuar.', 'warning')
-        #     return redirect(url_for('pricing'))
         return f(*args, **kwargs)
     return decorated_function
 
 def admin_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        # Para testes, esta verificação também pode ser comentada se necessário.
-        # if not current_user.is_authenticated or current_user.role != 'admin':
-        #     flash('Você não tem permissão para aceder a esta página.', 'danger')
-        #     return redirect(url_for('dashboard'))
+        if not current_user.is_authenticated or current_user.role != 'admin':
+            flash('Você não tem permissão para aceder a esta página.', 'danger')
+            return redirect(url_for('dashboard'))
         return f(*args, **kwargs)
     return decorated_function
 
