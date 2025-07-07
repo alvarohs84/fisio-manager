@@ -64,3 +64,4 @@ class PatientForm(FlaskForm):
         validators=[Optional()]
     )
     submit = SubmitField('Salvar Paciente')
+
