@@ -1,3 +1,5 @@
+# app.py (COMPLETO E COM VERIFICAÇÃO DE ACESSO DESABILITADA PARA TESTES)
+
 import os
 from dotenv import load_dotenv
 import uuid
@@ -17,8 +19,9 @@ from functools import wraps
 
 load_dotenv()
 
+# --- CONFIGURAÇÃO DA APLICAÇÃO ---
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY') or 'uma-chave-secreta-muito-segura'
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY') or 'uma-chave-secreta-muito-segura-e-diferente-para-testes'
 basedir = os.path.abspath(os.path.dirname(__file__))
 render_db_url = os.environ.get('DATABASE_URL')
 if render_db_url and render_db_url.startswith("postgres://"):
@@ -26,6 +29,12 @@ if render_db_url and render_db_url.startswith("postgres://"):
 app.config['SQLALCHEMY_DATABASE_URI'] = render_db_url or 'sqlite:///' + os.path.join(basedir, 'app.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
+# --- IDS DOS PLANOS DO MERCADO PAGO ---
+app.config['MERCADO_PAGO_PLANO_MENSAL_ID'] = os.environ.get('MP_PLANO_MENSAL_ID')
+app.config['MERCADO_PAGO_PLANO_ANUAL_ID'] = os.environ.get('MP_PLANO_ANUAL_ID')
+
+
+# --- INICIALIZAÇÃO DAS EXTENSÕES ---
 from models import db, User, Patient, Appointment, ElectronicRecord, Assessment, UploadedFile, Clinic
 db.init_app(app)
 migrate = Migrate(app, db)
@@ -35,6 +44,7 @@ login_manager.login_view = 'login'
 login_manager.login_message = 'Por favor, faça o login para aceder a esta página.'
 login_manager.login_message_category = 'info'
 
+# --- CONFIGURAÇÃO DOS SDKs ---
 mp_sdk = mercadopago.SDK(os.environ.get("MERCADO_PAGO_ACCESS_TOKEN"))
 cloudinary.config(cloud_name=os.environ.get('CLOUDINARY_CLOUD_NAME'), api_key=os.environ.get('CLOUDINARY_API_KEY'), api_secret=os.environ.get('CLOUDINARY_API_SECRET'), secure=True)
 
@@ -54,98 +64,270 @@ def format_datetime_filter(s, format='%d/%m/%Y'):
     if hasattr(s, 'strftime'): return s.strftime(format)
     return s
 
+# --- DECORADORES DE ACESSO (DESABILITADOS PARA TESTE) ---
 def access_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
+        # A verificação de acesso está desabilitada para testes.
+        # Lembre-se de reativar em produção, removendo os comentários abaixo.
+        # if not current_user.is_authenticated or not current_user.clinic.access_expires_on or current_user.clinic.access_expires_on < datetime.utcnow():
+        #     flash('O seu acesso expirou ou não está ativo. Por favor, adquira um passe para continuar.', 'warning')
+        #     return redirect(url_for('pricing'))
         return f(*args, **kwargs)
     return decorated_function
 
 def admin_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if not current_user.is_authenticated or current_user.role != 'admin':
-            flash('Você não tem permissão para aceder a esta página.', 'danger')
-            return redirect(url_for('dashboard'))
+        # Para testes, esta verificação também pode ser comentada se necessário.
+        # if not current_user.is_authenticated or current_user.role != 'admin':
+        #     flash('Você não tem permissão para aceder a esta página.', 'danger')
+        #     return redirect(url_for('dashboard'))
         return f(*args, **kwargs)
     return decorated_function
 
-# --- ROTAS DE GESTÃO DE PROFISSIONAIS ---
-@app.route('/professionals')
-@login_required
-@admin_required
-def list_professionals():
-    professionals = User.query.filter_by(clinic_id=current_user.clinic_id).all()
-    return render_template('list_professionals.html', professionals=professionals, title="Gerir Profissionais")
+# --- ROTAS DE PAGAMENTO E SUBSCRIÇÃO ---
+@app.route('/pricing')
+#@login_required
+def pricing():
+    return render_template('pricing_checkout_pro.html', title="Passes de Acesso")
 
-@app.route('/professional/add', methods=['GET', 'POST'])
-@login_required
-@admin_required
-def add_professional():
-    from forms import ProfessionalForm
-    form = ProfessionalForm()
-    if form.validate_on_submit():
-        new_professional = User(
-            name=form.name.data,
-            email=form.email.data,
-            role=form.role.data,
-            date_of_birth=form.date_of_birth.data,
-            cpf=form.cpf.data,
-            address=form.address.data,
-            phone=form.phone.data,
-            crefito=form.crefito.data,
-            clinic_id=current_user.clinic_id
-        )
-        if form.password.data:
-            new_professional.set_password(form.password.data)
+@app.route('/create-payment/<plan_type>')
+#@login_required
+def create_payment(plan_type):
+    if plan_type == 'anual':
+        price = 599.00
+        title = "Acesso Anual FisioManager"
+    else: # Mensal como padrão
+        price = 59.90
+        title = "Acesso Mensal FisioManager"
+
+    # Para testes sem login, usamos um email e ID de clínica fixos
+    payer_email = "cliente_teste@email.com"
+    clinic_id = 1 # Assumindo que a primeira clínica é a de teste
+    if current_user.is_authenticated:
+        payer_email = current_user.email
+        clinic_id = current_user.clinic_id
+
+    external_reference = f"clinic_{clinic_id}_plan_{plan_type}_{uuid.uuid4()}"
+
+    preference_data = {
+        "items": [{"title": title, "quantity": 1, "unit_price": price}],
+        "payer": {"email": payer_email},
+        "back_urls": {
+            "success": url_for('dashboard', _external=True),
+            "failure": url_for('pricing', _external=True),
+            "pending": url_for('pricing', _external=True)
+        },
+        "auto_return": "approved",
+        "external_reference": external_reference,
+        "notification_url": url_for('mercadopago_ipn', _external=True)
+    }
+
+    try:
+        preference_result = mp_sdk.preference().create(preference_data)
+        if preference_result["status"] == 201:
+            return redirect(preference_result["response"]["init_point"])
         else:
-            new_professional.set_password('fisiomanager123')
-        
-        db.session.add(new_professional)
-        db.session.commit()
-        flash('Novo profissional adicionado com sucesso!', 'success')
-        return redirect(url_for('list_professionals'))
-    return render_template('add_edit_professional.html', form=form, title="Adicionar Profissional")
+            flash("Erro ao criar preferência de pagamento.", 'danger')
+            return redirect(url_for('pricing'))
+    except Exception as e:
+        app.logger.error(f"Erro na API do Mercado Pago: {e}")
+        flash("Ocorreu um erro ao comunicar com o sistema de pagamentos.", 'danger')
+        return redirect(url_for('pricing'))
 
-@app.route('/professional/<int:professional_id>/edit', methods=['GET', 'POST'])
-@login_required
-@admin_required
-def edit_professional(professional_id):
-    professional = User.query.get_or_404(professional_id)
-    if professional.clinic_id != current_user.clinic_id:
-        abort(403)
-    
-    from forms import ProfessionalForm
-    form = ProfessionalForm(obj=professional)
+@app.route('/mercadopago-ipn', methods=['POST'])
+def mercadopago_ipn():
+    data = request.get_json()
+    if data and data.get("type") == "payment":
+        payment_id = data.get("data", {}).get("id")
+        if payment_id:
+            try:
+                payment_info = mp_sdk.payment().get(payment_id)
+                if payment_info["status"] == 200:
+                    payment = payment_info["response"]
+                    if payment.get("status") == "approved":
+                        external_ref = payment.get("external_reference")
+                        if external_ref and external_ref.startswith("clinic_"):
+                            parts = external_ref.split('_')
+                            clinic_id = int(parts[1])
+                            plan_type = parts[3]
+                            
+                            clinic = Clinic.query.get(clinic_id)
+                            if clinic:
+                                duration = 365 if plan_type == 'anual' else 30
+                                current_expiry = clinic.access_expires_on or datetime.utcnow()
+                                if current_expiry < datetime.utcnow():
+                                    current_expiry = datetime.utcnow()
+                                
+                                clinic.access_expires_on = current_expiry + timedelta(days=duration)
+                                db.session.commit()
+            except Exception as e:
+                app.logger.error(f"Erro ao processar IPN do MP: {e}")
+                return "Erro", 500
+    return "OK", 200
+
+# --- ROTAS DE AUTENTICAÇÃO ---
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if current_user.is_authenticated: return redirect(url_for('dashboard'))
+    from forms import RegistrationForm
+    form = RegistrationForm()
     if form.validate_on_submit():
-        professional.name = form.name.data
-        professional.email = form.email.data
-        professional.role = form.role.data
-        professional.date_of_birth = form.date_of_birth.data
-        professional.cpf = form.cpf.data
-        professional.address = form.address.data
-        professional.phone = form.phone.data
-        professional.crefito = form.crefito.data
-        if form.password.data:
-            professional.set_password(form.password.data)
+        new_clinic = Clinic(name=f"Clínica de {form.name.data}")
+        db.session.add(new_clinic)
         db.session.commit()
-        flash('Dados do profissional atualizados com sucesso!', 'success')
-        return redirect(url_for('list_professionals'))
-        
-    return render_template('add_edit_professional.html', form=form, title="Editar Profissional")
+        user = User(name=form.name.data, email=form.email.data, clinic_id=new_clinic.id, role='admin')
+        user.set_password(form.password.data)
+        db.session.add(user)
+        db.session.commit()
+        flash('Sua conta de administrador foi criada com sucesso!', 'success')
+        login_user(user)
+        return redirect(url_for('dashboard'))
+    return render_template('register.html', title='Registrar', form=form)
 
-@app.route('/professional/<int:professional_id>/delete', methods=['POST'])
-@login_required
-@admin_required
-def delete_professional(professional_id):
-    professional = User.query.get_or_404(professional_id)
-    if professional.clinic_id != current_user.clinic_id or professional.id == current_user.id:
-        flash('Não é possível apagar a sua própria conta de administrador.', 'danger')
-        return redirect(url_for('list_professionals'))
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if current_user.is_authenticated: return redirect(url_for('dashboard'))
+    from forms import LoginForm
+    form = LoginForm()
+    if form.validate_on_submit():
+        user = User.query.filter_by(email=form.email.data).first()
+        if user and user.check_password(form.password.data):
+            login_user(user, remember=form.remember_me.data)
+            next_page = request.args.get('next')
+            return redirect(next_page) if next_page else redirect(url_for('dashboard'))
+        else:
+            flash('Login sem sucesso. Verifique o seu email e senha.', 'danger')
+    return render_template('login.html', title='Login', form=form)
+
+@app.route('/logout')
+def logout():
+    logout_user()
+    return redirect(url_for('index'))
+
+# --- ROTAS PRINCIPAIS E DE GESTÃO ---
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+@app.route('/dashboard')
+#@login_required
+#@access_required
+def dashboard():
+    hoje = date.today()
+    clinic_id = 1 # ID fixo para testes
+    if current_user.is_authenticated:
+        clinic_id = current_user.clinic_id
     
-    db.session.delete(professional)
+    gender_data = db.session.query(Patient.gender, func.count(Patient.id)).filter(Patient.clinic_id == clinic_id).group_by(Patient.gender).all()
+    gender_chart_data = {label if label else "Não Esp.": count for label, count in gender_data}
+    specialty_data = db.session.query(Patient.specialty, func.count(Patient.id)).filter(Patient.clinic_id == clinic_id).group_by(Patient.specialty).all()
+    specialty_chart_data = {label if label else "N/A": count for label, count in specialty_data}
+    patients_for_age = Patient.query.filter_by(clinic_id=clinic_id).all()
+    age_groups = {"0-18": 0, "19-30": 0, "31-50": 0, "51+": 0}
+    for patient in patients_for_age:
+        age = patient.age
+        if age <= 18: age_groups["0-18"] += 1
+        elif age <= 30: age_groups["19-30"] += 1
+        elif age <= 50: age_groups["31-50"] += 1
+        else: age_groups["51+"] += 1
+    start_of_month = hoje.replace(day=1)
+    appointments_per_patient = db.session.query(Patient, func.count(Appointment.id)).outerjoin(Appointment, (Patient.id == Appointment.patient_id) & (Appointment.status == 'Concluído') & (extract('month', Appointment.start_time) == hoje.month) & (extract('year', Appointment.start_time) == hoje.year)).filter(Patient.clinic_id == clinic_id).group_by(Patient.id).order_by(func.count(Appointment.id).desc()).all()
+    return render_template('dashboard.html', title="Dashboard", gender_data=gender_chart_data, specialty_data=specialty_chart_data, age_data=age_groups, patient_appointment_counts=appointments_per_patient)
+
+@app.route('/agenda')
+#@login_required
+#@access_required
+def agenda():
+    return render_template('agenda_grid.html')
+
+@app.route('/patients')
+#@login_required
+#@access_required
+def list_patients():
+    page = request.args.get('page', 1, type=int)
+    search_query = request.args.get('q', '')
+    clinic_id_to_use = current_user.clinic_id if current_user.is_authenticated else 1
+    patients_query = Patient.query.filter_by(clinic_id=clinic_id_to_use)
+    if search_query:
+        patients_query = patients_query.filter(Patient.full_name.ilike(f'%{search_query}%'))
+    patients_pagination = patients_query.order_by(Patient.full_name).paginate(page=page, per_page=10)
+    patients_enriched = []
+    for patient in patients_pagination.items:
+        appointment_count = patient.appointments.count()
+        latest_record = patient.records.order_by(ElectronicRecord.record_date.desc()).first()
+        latest_diagnosis = latest_record.medical_diagnosis if (latest_record and latest_record.medical_diagnosis) else "N/A"
+        patients_enriched.append({'data': patient, 'appointment_count': appointment_count, 'latest_diagnosis': latest_diagnosis})
+    return render_template('list_patients.html', patients_pagination=patients_pagination, patients_enriched=patients_enriched, search_query=search_query, title="Painel de Pacientes")
+
+@app.route('/staff')
+#@login_required
+#@access_required
+#@admin_required
+def list_staff():
+    clinic_id_to_use = current_user.clinic_id if current_user.is_authenticated else 1
+    staff_members = User.query.filter_by(clinic_id=clinic_id_to_use).all()
+    return render_template('list_staff.html', staff_members=staff_members, title="Gerir Equipa")
+
+@app.route('/staff/add', methods=['GET', 'POST'])
+#@login_required
+#@access_required
+#@admin_required
+def add_staff():
+    from forms import StaffForm
+    form = StaffForm()
+    if form.validate_on_submit():
+        clinic_id_to_use = current_user.clinic_id if current_user.is_authenticated else 1
+        new_staff = User(name=form.name.data, email=form.email.data, role=form.role.data, date_of_birth=form.date_of_birth.data, cpf=form.cpf.data, address=form.address.data, phone=form.phone.data, crefito=form.crefito.data, clinic_id=clinic_id_to_use)
+        if form.password.data:
+            new_staff.set_password(form.password.data)
+        else:
+            new_staff.set_password('fisiomanager123')
+        db.session.add(new_staff)
+        db.session.commit()
+        flash('Novo membro da equipa adicionado com sucesso!', 'success')
+        return redirect(url_for('list_staff'))
+    return render_template('add_edit_staff.html', form=form, title="Adicionar Membro")
+
+@app.route('/staff/<int:staff_id>/edit', methods=['GET', 'POST'])
+#@login_required
+#@access_required
+#@admin_required
+def edit_staff(staff_id):
+    staff_member = User.query.get_or_404(staff_id)
+    # if staff_member.clinic_id != current_user.clinic_id: abort(403)
+    from forms import StaffForm
+    form = StaffForm(obj=staff_member)
+    if form.validate_on_submit():
+        staff_member.name = form.name.data
+        staff_member.email = form.email.data
+        staff_member.role = form.role.data
+        staff_member.date_of_birth = form.date_of_birth.data
+        staff_member.cpf = form.cpf.data
+        staff_member.address = form.address.data
+        staff_member.phone = form.phone.data
+        staff_member.crefito = form.crefito.data
+        if form.password.data:
+            staff_member.set_password(form.password.data)
+        db.session.commit()
+        flash('Dados do membro da equipa atualizados com sucesso!', 'success')
+        return redirect(url_for('list_staff'))
+    return render_template('add_edit_staff.html', form=form, title="Editar Membro")
+
+@app.route('/staff/<int:staff_id>/delete', methods=['POST'])
+#@login_required
+#@access_required
+#@admin_required
+def delete_staff(staff_id):
+    staff_member = User.query.get_or_404(staff_id)
+    # if staff_member.clinic_id != current_user.clinic_id or staff_member.id == current_user.id:
+    #     flash('Não é possível apagar a sua própria conta de administrador.', 'danger')
+    #     return redirect(url_for('list_staff'))
+    db.session.delete(staff_member)
     db.session.commit()
-    flash('Profissional apagado com sucesso.', 'success')
-    return redirect(url_for('list_professionals'))
+    flash('Membro da equipa apagado com sucesso.', 'success')
+    return redirect(url_for('list_staff'))
 
 @app.route('/patient/add', methods=['GET', 'POST'])
 #@login_required
@@ -339,6 +521,7 @@ def init_db_command():
 
 if __name__ == '__main__':
     app.run(debug=True)
+
 
 
 
