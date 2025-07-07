@@ -18,18 +18,16 @@ class Clinic(db.Model):
         return f'<Clinic {self.name}>'
 
 class User(UserMixin, db.Model):
-    """Modelo para todos os utilizadores do sistema (Admin, Profissional, Secretária)"""
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     email = db.Column(db.String(120), index=True, unique=True, nullable=False)
     password_hash = db.Column(db.String(256))
     
-    # NOVOS CAMPOS ADICIONADOS
-    role = db.Column(db.String(50), nullable=False, default='professional') # 'admin', 'professional', 'secretary'
+    role = db.Column(db.String(50), nullable=False, default='professional')
     date_of_birth = db.Column(db.Date, nullable=True)
     address = db.Column(db.String(255), nullable=True)
     cpf = db.Column(db.String(20), nullable=True)
-    crefito = db.Column(db.String(20), nullable=True) # Específico para fisioterapeutas
+    crefito = db.Column(db.String(20), nullable=True)
     phone = db.Column(db.String(20), nullable=True)
     
     clinic_id = db.Column(db.Integer, db.ForeignKey('clinic.id'), nullable=False)
