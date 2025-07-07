@@ -93,7 +93,7 @@ def pricing():
     return render_template('pricing_checkout_pro.html', title="Passes de Acesso")
 
 @app.route('/create-payment/<plan_type>')
-#@login_required
+@login_required
 def create_payment(plan_type):
     if plan_type == 'anual':
         price = 599.00
@@ -102,18 +102,11 @@ def create_payment(plan_type):
         price = 59.90
         title = "Acesso Mensal FisioManager"
 
-    # Para testes sem login, usamos um email e ID de clínica fixos
-    payer_email = "cliente_teste@email.com"
-    clinic_id = 1 # Assumindo que a primeira clínica é a de teste
-    if current_user.is_authenticated:
-        payer_email = current_user.email
-        clinic_id = current_user.clinic_id
-
-    external_reference = f"clinic_{clinic_id}_plan_{plan_type}_{uuid.uuid4()}"
+    external_reference = f"clinic_{current_user.clinic_id}_plan_{plan_type}_{uuid.uuid4()}"
 
     preference_data = {
         "items": [{"title": title, "quantity": 1, "unit_price": price}],
-        "payer": {"email": payer_email},
+        "payer": {"email": current_user.email},
         "back_urls": {
             "success": url_for('dashboard', _external=True),
             "failure": url_for('pricing', _external=True),

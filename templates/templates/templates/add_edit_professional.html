@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <h2 class="card-title text-center">{{ title }}</h2>
+                <form method="POST" action="" novalidate>
+                    {{ form.hidden_tag() }}
+                    <div class="mb-3">{{ form.name.label(class="form-label") }}{{ form.name(class="form-control") }}</div>
+                    <div class="mb-3">{{ form.email.label(class="form-label") }}{{ form.email(class="form-control") }}</div>
+                    <div class="mb-3">{{ form.role.label(class="form-label") }}{{ form.role(class="form-select") }}</div>
+                    <hr>
+                    <div class="mb-3">{{ form.date_of_birth.label(class="form-label") }}{{ form.date_of_birth(class="form-control") }}</div>
+                    <div class="mb-3">{{ form.cpf.label(class="form-label") }}{{ form.cpf(class="form-control") }}</div>
+                    <div class="mb-3">{{ form.address.label(class="form-label") }}{{ form.address(class="form-control") }}</div>
+                    <div class="mb-3">{{ form.phone.label(class="form-label") }}{{ form.phone(class="form-control") }}</div>
+                    <div class="mb-3">{{ form.crefito.label(class="form-label") }}{{ form.crefito(class="form-control") }}</div>
+                    <hr>
+                    <div class="mb-3">{{ form.password.label(class="form-label") }}{{ form.password(class="form-control") }}</div>
+                    <div class="d-flex justify-content-between">
+                        <a href="{{ url_for('list_professionals') }}" class="btn btn-secondary">Cancelar</a>
+                        {{ form.submit(class="btn btn-primary") }}
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
