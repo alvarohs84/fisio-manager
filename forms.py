@@ -23,6 +23,21 @@ class RegistrationForm(FlaskForm):
         if user is not None:
             raise ValidationError('Este email já está cadastrado.')
 
+class ProfessionalForm(FlaskForm):
+    name = StringField('Nome Completo', validators=[DataRequired()])
+    email = StringField('Email', validators=[DataRequired(), Email()])
+    role = SelectField('Função', choices=[
+        ('professional', 'Fisioterapeuta'),
+        ('secretary', 'Secretária(o)')
+    ], validators=[DataRequired()])
+    date_of_birth = DateField('Data de Nascimento', format='%Y-%m-%d', validators=[Optional()])
+    cpf = StringField('CPF', validators=[Optional()])
+    address = StringField('Endereço', validators=[Optional()])
+    phone = StringField('Telefone', validators=[Optional()])
+    crefito = StringField('CREFITO', validators=[Optional()])
+    password = PasswordField('Senha (deixe em branco para não alterar)', validators=[Optional()])
+    submit = SubmitField('Salvar Profissional')
+
 class PatientForm(FlaskForm):
     full_name = StringField('Nome Completo', validators=[DataRequired()])
     date_of_birth = DateField('Data de Nascimento', format='%Y-%m-%d', validators=[DataRequired()])

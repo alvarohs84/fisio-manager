@@ -261,73 +261,69 @@ def list_patients():
         patients_enriched.append({'data': patient, 'appointment_count': appointment_count, 'latest_diagnosis': latest_diagnosis})
     return render_template('list_patients.html', patients_pagination=patients_pagination, patients_enriched=patients_enriched, search_query=search_query, title="Painel de Pacientes")
 
-@app.route('/staff')
+@app.route('/professionals')
 #@login_required
-#@access_required
 #@admin_required
-def list_staff():
+def list_professionals():
     clinic_id_to_use = current_user.clinic_id if current_user.is_authenticated else 1
-    staff_members = User.query.filter_by(clinic_id=clinic_id_to_use).all()
-    return render_template('list_staff.html', staff_members=staff_members, title="Gerir Equipa")
+    professionals = User.query.filter_by(clinic_id=clinic_id_to_use).all()
+    return render_template('list_professionals.html', professionals=professionals, title="Gerir Profissionais")
 
-@app.route('/staff/add', methods=['GET', 'POST'])
+@app.route('/professional/add', methods=['GET', 'POST'])
 #@login_required
-#@access_required
 #@admin_required
-def add_staff():
-    from forms import StaffForm
-    form = StaffForm()
+def add_professional():
+    from forms import ProfessionalForm
+    form = ProfessionalForm()
     if form.validate_on_submit():
         clinic_id_to_use = current_user.clinic_id if current_user.is_authenticated else 1
-        new_staff = User(name=form.name.data, email=form.email.data, role=form.role.data, date_of_birth=form.date_of_birth.data, cpf=form.cpf.data, address=form.address.data, phone=form.phone.data, crefito=form.crefito.data, clinic_id=clinic_id_to_use)
+        new_professional = User(name=form.name.data, email=form.email.data, role=form.role.data, date_of_birth=form.date_of_birth.data, cpf=form.cpf.data, address=form.address.data, phone=form.phone.data, crefito=form.crefito.data, clinic_id=clinic_id_to_use)
         if form.password.data:
-            new_staff.set_password(form.password.data)
+            new_professional.set_password(form.password.data)
         else:
-            new_staff.set_password('fisiomanager123')
-        db.session.add(new_staff)
+            new_professional.set_password('fisiomanager123')
+        db.session.add(new_professional)
         db.session.commit()
-        flash('Novo membro da equipa adicionado com sucesso!', 'success')
-        return redirect(url_for('list_staff'))
-    return render_template('add_edit_staff.html', form=form, title="Adicionar Membro")
+        flash('Novo profissional adicionado com sucesso!', 'success')
+        return redirect(url_for('list_professionals'))
+    return render_template('add_edit_professional.html', form=form, title="Adicionar Profissional")
 
-@app.route('/staff/<int:staff_id>/edit', methods=['GET', 'POST'])
+@app.route('/professional/<int:professional_id>/edit', methods=['GET', 'POST'])
 #@login_required
-#@access_required
 #@admin_required
-def edit_staff(staff_id):
-    staff_member = User.query.get_or_404(staff_id)
-    # if staff_member.clinic_id != current_user.clinic_id: abort(403)
-    from forms import StaffForm
-    form = StaffForm(obj=staff_member)
+def edit_professional(professional_id):
+    professional = User.query.get_or_404(professional_id)
+    # if professional.clinic_id != current_user.clinic_id: abort(403)
+    from forms import ProfessionalForm
+    form = ProfessionalForm(obj=professional)
     if form.validate_on_submit():
-        staff_member.name = form.name.data
-        staff_member.email = form.email.data
-        staff_member.role = form.role.data
-        staff_member.date_of_birth = form.date_of_birth.data
-        staff_member.cpf = form.cpf.data
-        staff_member.address = form.address.data
-        staff_member.phone = form.phone.data
-        staff_member.crefito = form.crefito.data
+        professional.name = form.name.data
+        professional.email = form.email.data
+        professional.role = form.role.data
+        professional.date_of_birth = form.date_of_birth.data
+        professional.cpf = form.cpf.data
+        professional.address = form.address.data
+        professional.phone = form.phone.data
+        professional.crefito = form.crefito.data
         if form.password.data:
-            staff_member.set_password(form.password.data)
+            professional.set_password(form.password.data)
         db.session.commit()
-        flash('Dados do membro da equipa atualizados com sucesso!', 'success')
-        return redirect(url_for('list_staff'))
-    return render_template('add_edit_staff.html', form=form, title="Editar Membro")
+        flash('Dados do profissional atualizados com sucesso!', 'success')
+        return redirect(url_for('list_professionals'))
+    return render_template('add_edit_professional.html', form=form, title="Editar Profissional")
 
-@app.route('/staff/<int:staff_id>/delete', methods=['POST'])
+@app.route('/professional/<int:professional_id>/delete', methods=['POST'])
 #@login_required
-#@access_required
 #@admin_required
-def delete_staff(staff_id):
-    staff_member = User.query.get_or_404(staff_id)
-    # if staff_member.clinic_id != current_user.clinic_id or staff_member.id == current_user.id:
+def delete_professional(professional_id):
+    professional = User.query.get_or_404(professional_id)
+    # if professional.clinic_id != current_user.clinic_id or professional.id == current_user.id:
     #     flash('Não é possível apagar a sua própria conta de administrador.', 'danger')
-    #     return redirect(url_for('list_staff'))
-    db.session.delete(staff_member)
+    #     return redirect(url_for('list_professionals'))
+    db.session.delete(professional)
     db.session.commit()
-    flash('Membro da equipa apagado com sucesso.', 'success')
-    return redirect(url_for('list_staff'))
+    flash('Profissional apagado com sucesso.', 'success')
+    return redirect(url_for('list_professionals'))
 
 @app.route('/patient/add', methods=['GET', 'POST'])
 #@login_required
@@ -521,6 +517,7 @@ def init_db_command():
 
 if __name__ == '__main__':
     app.run(debug=True)
+
 
 
 

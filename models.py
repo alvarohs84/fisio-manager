@@ -20,10 +20,20 @@ class Clinic(db.Model):
         return f'<Clinic {self.name}>'
 
 class User(UserMixin, db.Model):
+    """Modelo para todos os utilizadores do sistema (Admin, Profissional, Secretária)"""
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     email = db.Column(db.String(120), index=True, unique=True, nullable=False)
     password_hash = db.Column(db.String(256))
+    
+    # NOVOS CAMPOS ADICIONADOS
+    role = db.Column(db.String(50), nullable=False, default='professional') # 'admin', 'professional', 'secretary'
+    date_of_birth = db.Column(db.Date, nullable=True)
+    address = db.Column(db.String(255), nullable=True)
+    cpf = db.Column(db.String(20), nullable=True)
+    crefito = db.Column(db.String(20), nullable=True) # Específico para fisioterapeutas
+    phone = db.Column(db.String(20), nullable=True)
+    
     clinic_id = db.Column(db.Integer, db.ForeignKey('clinic.id'), nullable=False)
     
     patients = db.relationship('Patient', backref='professional', lazy='dynamic', cascade="all, delete-orphan")
@@ -48,18 +58,16 @@ class Patient(db.Model):
     specialty = db.Column(db.String(100), nullable=True)
     clinic_id = db.Column(db.Integer, db.ForeignKey('clinic.id'), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    
     appointments = db.relationship('Appointment', backref='patient', lazy='dynamic', cascade="all, delete-orphan")
     records = db.relationship('ElectronicRecord', backref='patient', lazy='dynamic', cascade="all, delete-orphan")
     assessments = db.relationship('Assessment', backref='patient', lazy='dynamic', cascade="all, delete-orphan")
-
     @property
     def age(self):
         today = date.today()
-        return today.year - self.date_of_birth.year - ((today.month, today.day) < (self.date_of_birth.month, self.date_of_birth.day))
-    
-    def __repr__(self):
-        return f'<Patient {self.full_name}>'
+        if self.date_of_birth:
+            return today.year - self.date_of_birth.year - ((today.month, today.day) < (self.date_of_birth.month, self.date_of_birth.day))
+        return 0
+    def __repr__(self): return f'<Patient {self.full_name}>'
 
 class Appointment(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -74,9 +82,7 @@ class Appointment(db.Model):
     patient_id = db.Column(db.Integer, db.ForeignKey('patient.id'), nullable=False)
     is_recurring = db.Column(db.Boolean, default=False)
     recurrence_id = db.Column(db.String(36))
-    
-    def __repr__(self):
-        return f'<Appointment for {self.patient.full_name} at {self.start_time}>'
+    def __repr__(self): return f'<Appointment for {self.patient.full_name} at {self.start_time}>'
 
 class ElectronicRecord(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -87,9 +93,7 @@ class ElectronicRecord(db.Model):
     assessment = db.Column(db.Text, nullable=False)
     plan = db.Column(db.Text, nullable=False)
     patient_id = db.Column(db.Integer, db.ForeignKey('patient.id'), nullable=False)
-    
-    def __repr__(self):
-        return f'<Record for {self.patient.full_name} on {self.record_date}>'
+    def __repr__(self): return f'<Record for {self.patient.full_name} on {self.record_date}>'
 
 class Assessment(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -110,9 +114,7 @@ class Assessment(db.Model):
     diagnosis = db.Column(db.Text, nullable=True)
     goals = db.Column(db.Text, nullable=True)
     treatment_plan = db.Column(db.Text, nullable=True)
-    
-    def __repr__(self):
-        return f'<Assessment for {self.patient.full_name} on {self.created_at}>'
+    def __repr__(self): return f'<Assessment for {self.patient.full_name} on {self.created_at}>'
 
 class UploadedFile(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -120,6 +122,5 @@ class UploadedFile(db.Model):
     secure_url = db.Column(db.String(512), nullable=False)
     resource_type = db.Column(db.String(50), nullable=False)
     assessment_id = db.Column(db.Integer, db.ForeignKey('assessment.id'), nullable=False)
-    
-    def __repr__(self):
-        return f'<File {self.public_id}>'
+    def __repr__(self): return f'<File {self.public_id}>'
+
