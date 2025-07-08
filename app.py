@@ -1,4 +1,5 @@
-# app.py (Versão completa e corrigida para rodar)
+# app.py
+# Forçando a atualização para o Render - v3
 
 import os
 import uuid
