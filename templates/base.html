@@ -23,9 +23,6 @@
                     {% if current_user.is_authenticated %}
                         <li class="nav-item"><a class="nav-link navbar-custom-link" href="{{ url_for('agenda') }}">Agenda</a></li>
                         <li class="nav-item"><a class="nav-link navbar-custom-link" href="{{ url_for('list_patients') }}">Pacientes</a></li>
-                        {% if current_user.role == 'admin' %}
-                            <li class="nav-item"><a class="nav-link navbar-custom-link" href="{{ url_for('list_professionals') }}">Profissionais</a></li>
-                        {% endif %}
                         <li class="nav-item"><a class="nav-link navbar-custom-link" href="{{ url_for('reports') }}">Relatórios</a></li>
                         <li class="nav-item"><a href="{{ url_for('pricing') }}" class="nav-link navbar-custom-link">Planos</a></li>
                         <li class="nav-item"><a class="nav-link navbar-custom-link" href="{{ url_for('dashboard') }}">Dashboard</a></li>
@@ -62,6 +59,7 @@
     {% block scripts %}{% endblock %}
 </body>
 </html>
+
 
 
 

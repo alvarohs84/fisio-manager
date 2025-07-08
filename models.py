@@ -24,12 +24,6 @@ class User(UserMixin, db.Model):
     name = db.Column(db.String(100), nullable=False)
     email = db.Column(db.String(120), index=True, unique=True, nullable=False)
     password_hash = db.Column(db.String(256))
-    role = db.Column(db.String(50), nullable=False, default='professional')
-    date_of_birth = db.Column(db.Date, nullable=True)
-    address = db.Column(db.String(255), nullable=True)
-    cpf = db.Column(db.String(20), nullable=True)
-    crefito = db.Column(db.String(20), nullable=True)
-    phone = db.Column(db.String(20), nullable=True)
     clinic_id = db.Column(db.Integer, db.ForeignKey('clinic.id'), nullable=False)
     
     patients = db.relationship('Patient', backref='professional', lazy='dynamic', cascade="all, delete-orphan")

@@ -88,12 +88,12 @@ def admin_required(f):
 
 # --- ROTAS DE PAGAMENTO E SUBSCRIÇÃO ---
 @app.route('/pricing')
-#@login_required # Comentado para testes
+#@login_required
 def pricing():
     return render_template('pricing_checkout_pro.html', title="Passes de Acesso")
 
 @app.route('/create-payment/<plan_type>')
-#@login_required # Comentado para testes
+#@login_required
 def create_payment(plan_type):
     if plan_type == 'anual':
         price = 599.00
@@ -521,6 +521,7 @@ def init_db_command():
 
 if __name__ == '__main__':
     app.run(debug=True)
+
 
 
 
