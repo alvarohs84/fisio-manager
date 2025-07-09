@@ -1,5 +1,3 @@
-# forms.py
-
 from flask_wtf import FlaskForm
 from wtforms import StringField, PasswordField, SubmitField, BooleanField, DateField, TimeField, SelectField, IntegerField, TextAreaField, MultipleFileField, RadioField
 from wtforms.validators import DataRequired, Email, EqualTo, ValidationError, Optional, URL
@@ -92,4 +90,11 @@ class AssessmentForm(FlaskForm):
     goals = TextAreaField('Objetivos (Curto, Médio e Longo Prazo)', validators=[Optional()])
     treatment_plan = TextAreaField('Plano de Tratamento', validators=[Optional()])
     submit = SubmitField('Salvar Avaliação')
+
+class ExerciseForm(FlaskForm):
+    name = StringField('Nome do Exercício', validators=[DataRequired()])
+    description = TextAreaField('Descrição (opcional)')
+    instructions = TextAreaField('Instruções (opcional)')
+    video_url = StringField('Link do Vídeo (YouTube, Vimeo, etc.)', validators=[Optional(), URL(message="Por favor, insira uma URL válida.")])
+    submit = SubmitField('Salvar Exercício')
 
