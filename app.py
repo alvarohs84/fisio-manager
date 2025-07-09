@@ -29,13 +29,8 @@ if render_db_url and render_db_url.startswith("postgres://"):
 app.config['SQLALCHEMY_DATABASE_URI'] = render_db_url or 'sqlite:///' + os.path.join(basedir, 'app.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# --- IDS DOS PLANOS DO MERCADO PAGO ---
-app.config['MERCADO_PAGO_PLANO_MENSAL_ID'] = os.environ.get('MP_PLANO_MENSAL_ID')
-app.config['MERCADO_PAGO_PLANO_ANUAL_ID'] = os.environ.get('MP_PLANO_ANUAL_ID')
-
-
 # --- INICIALIZAÇÃO DAS EXTENSÕES ---
-from models import db, User, Patient, Appointment, ElectronicRecord, Assessment, UploadedFile, Clinic
+from models import db, User, Patient, Appointment, ElectronicRecord, Assessment, UploadedFile, Clinic, Exercise
 db.init_app(app)
 migrate = Migrate(app, db)
 bcrypt = Bcrypt(app)
@@ -339,6 +334,58 @@ def delete_professional(professional_id):
     flash('Profissional apagado com sucesso.', 'success')
     return redirect(url_for('list_professionals'))
 
+@app.route('/exercises')
+#@login_required
+#@access_required
+def list_exercises():
+    clinic_id_to_use = current_user.clinic_id if current_user.is_authenticated else 1
+    exercises = Exercise.query.filter_by(clinic_id=clinic_id_to_use).order_by(Exercise.name).all()
+    return render_template('list_exercises.html', exercises=exercises, title="Biblioteca de Exercícios")
+
+@app.route('/exercise/add', methods=['GET', 'POST'])
+#@login_required
+#@access_required
+def add_exercise():
+    from forms import ExerciseForm
+    form = ExerciseForm()
+    if form.validate_on_submit():
+        clinic_id_to_use = current_user.clinic_id if current_user.is_authenticated else 1
+        new_exercise = Exercise(name=form.name.data, description=form.description.data, instructions=form.instructions.data, video_url=form.video_url.data, clinic_id=clinic_id_to_use)
+        db.session.add(new_exercise)
+        db.session.commit()
+        flash('Exercício adicionado com sucesso!', 'success')
+        return redirect(url_for('list_exercises'))
+    return render_template('add_edit_exercise.html', form=form, title="Adicionar Exercício")
+
+@app.route('/exercise/<int:exercise_id>/edit', methods=['GET', 'POST'])
+#@login_required
+#@access_required
+def edit_exercise(exercise_id):
+    exercise = Exercise.query.get_or_404(exercise_id)
+    # if exercise.clinic_id != current_user.clinic_id: abort(403)
+    from forms import ExerciseForm
+    form = ExerciseForm(obj=exercise)
+    if form.validate_on_submit():
+        exercise.name = form.name.data
+        exercise.description = form.description.data
+        exercise.instructions = form.instructions.data
+        exercise.video_url = form.video_url.data
+        db.session.commit()
+        flash('Exercício atualizado com sucesso!', 'success')
+        return redirect(url_for('list_exercises'))
+    return render_template('add_edit_exercise.html', form=form, title="Editar Exercício")
+
+@app.route('/exercise/<int:exercise_id>/delete', methods=['POST'])
+#@login_required
+#@access_required
+def delete_exercise(exercise_id):
+    exercise = Exercise.query.get_or_404(exercise_id)
+    # if exercise.clinic_id != current_user.clinic_id: abort(403)
+    db.session.delete(exercise)
+    db.session.commit()
+    flash('Exercício apagado com sucesso.', 'success')
+    return redirect(url_for('list_exercises'))
+
 @app.route('/patient/add', methods=['GET', 'POST'])
 #@login_required
 #@access_required
@@ -432,7 +479,7 @@ def add_assessment(patient_id):
         db.session.commit()
         flash('Nova avaliação salva com sucesso!', 'success')
         return redirect(url_for('patient_detail', patient_id=patient.id))
-    return render_template('add_assessment.html', title='Nova Avaliação', form=form, patient=patient)
+    return render_template('add_edit_assessment.html', title='Nova Avaliação', form=form, patient=patient)
 
 @app.route('/assessment/<int:assessment_id>')
 #@login_required
@@ -531,6 +578,7 @@ def init_db_command():
 
 if __name__ == '__main__':
     app.run(debug=True)
+
 
 
 
