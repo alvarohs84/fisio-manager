@@ -1,8 +1,8 @@
-"""Versão inicial completa com todas as funcionalidades
+"""Versão inicial completa com gestão de profissionais
 
-Revision ID: bc2c4c4f53fa
+Revision ID: 8a9428f260ab
 Revises: 
-Create Date: 2025-07-08 21:48:04.006782
+Create Date: 2025-07-08 23:07:27.579928
 
 """
 from alembic import op
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = 'bc2c4c4f53fa'
+revision = '8a9428f260ab'
 down_revision = None
 branch_labels = None
 depends_on = None

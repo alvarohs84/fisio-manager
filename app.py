@@ -216,43 +216,25 @@ def index():
 #@access_required
 def dashboard():
     hoje = date.today()
-    # Para testes sem login, usamos um ID de clínica fixo
-    clinic_id = 1
+    clinic_id = 1 # ID fixo para testes
     if current_user.is_authenticated:
         clinic_id = current_user.clinic_id
     
-    # Busca todos os pacientes da clínica para os gráficos de perfil
-    all_patients = Patient.query.filter_by(clinic_id=clinic_id).all()
-    total_patients = len(all_patients)
-    
-    gender_data = defaultdict(int)
-    for patient in all_patients:
-        gender_data[patient.gender or "Não Esp."] += 1
-
+    gender_data = db.session.query(Patient.gender, func.count(Patient.id)).filter(Patient.clinic_id == clinic_id).group_by(Patient.gender).all()
+    gender_chart_data = {label if label else "Não Esp.": count for label, count in gender_data}
     specialty_data = db.session.query(Patient.specialty, func.count(Patient.id)).filter(Patient.clinic_id == clinic_id).group_by(Patient.specialty).all()
     specialty_chart_data = {label if label else "N/A": count for label, count in specialty_data}
-
+    patients_for_age = Patient.query.filter_by(clinic_id=clinic_id).all()
     age_groups = {"0-18": 0, "19-30": 0, "31-50": 0, "51+": 0}
-    for patient in all_patients:
+    for patient in patients_for_age:
         age = patient.age
         if age <= 18: age_groups["0-18"] += 1
         elif age <= 30: age_groups["19-30"] += 1
         elif age <= 50: age_groups["31-50"] += 1
         else: age_groups["51+"] += 1
-
-    # Lógica para a tabela de atendimentos
     start_of_month = hoje.replace(day=1)
     appointments_per_patient = db.session.query(Patient, func.count(Appointment.id)).outerjoin(Appointment, (Patient.id == Appointment.patient_id) & (Appointment.status == 'Concluído') & (extract('month', Appointment.start_time) == hoje.month) & (extract('year', Appointment.start_time) == hoje.year)).filter(Patient.clinic_id == clinic_id).group_by(Patient.id).order_by(func.count(Appointment.id).desc()).all()
-    
-    return render_template(
-        'dashboard.html',
-        title="Dashboard",
-        gender_data=dict(gender_data),
-        total_patients=total_patients,
-        specialty_data=specialty_chart_data,
-        age_data=age_groups,
-        patient_appointment_counts=appointments_per_patient
-    )
+    return render_template('dashboard.html', title="Dashboard", gender_data=gender_chart_data, specialty_data=specialty_chart_data, age_data=age_groups, patient_appointment_counts=appointments_per_patient)
 
 @app.route('/agenda')
 #@login_required
@@ -535,6 +517,7 @@ def init_db_command():
 
 if __name__ == '__main__':
     app.run(debug=True)
+
 
 
 
