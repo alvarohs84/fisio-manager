@@ -65,4 +65,30 @@ class PatientForm(FlaskForm):
     )
     submit = SubmitField('Salvar Paciente')
 
+class ElectronicRecordForm(FlaskForm):
+    medical_diagnosis = TextAreaField('Diagnóstico Médico (opcional)', validators=[Optional()])
+    subjective_notes = TextAreaField('Subjetivo (relato do paciente)', validators=[DataRequired()])
+    objective_notes = TextAreaField('Objetivo (sua avaliação)', validators=[DataRequired()])
+    assessment = TextAreaField('Diagnóstico Fisioterapêutico', validators=[DataRequired()])
+    plan = TextAreaField('Plano de Tratamento', validators=[DataRequired()])
+    submit = SubmitField('Salvar Registro no Prontuário')
+
+class AssessmentForm(FlaskForm):
+    main_complaint = TextAreaField('Queixa Principal (QP)', validators=[Optional()])
+    history_of_present_illness = TextAreaField('História da Doença Atual (HDA)', validators=[Optional()])
+    past_medical_history = TextAreaField('História Patológica Pregressa (HPP)', validators=[Optional()])
+    medications = TextAreaField('Medicamentos em Uso', validators=[Optional()])
+    social_history = TextAreaField('História Social e Hábitos de Vida', validators=[Optional()])
+    inspection_notes = TextAreaField('Inspeção', validators=[Optional()])
+    palpation_notes = TextAreaField('Palpação', validators=[Optional()])
+    mobility_assessment = TextAreaField('Avaliação da Mobilidade (ADM, Goniometria, etc.)', validators=[Optional()])
+    strength_assessment = TextAreaField('Avaliação da Força Muscular (Escala de Kendall, etc.)', validators=[Optional()])
+    neuro_assessment = TextAreaField('Avaliação Neurológica', validators=[Optional()])
+    functional_assessment = TextAreaField('Avaliação Funcional e Testes Específicos', validators=[Optional()])
+    files = MultipleFileField('Exames Complementares (Fotos, Documentos)')
+    diagnosis = TextAreaField('Diagnóstico Fisioterapêutico', validators=[Optional()])
+    goals = TextAreaField('Objetivos (Curto, Médio e Longo Prazo)', validators=[Optional()])
+    treatment_plan = TextAreaField('Plano de Tratamento', validators=[Optional()])
+    submit = SubmitField('Salvar Avaliação')
+
 
