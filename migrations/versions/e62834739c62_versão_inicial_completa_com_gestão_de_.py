@@ -1,8 +1,8 @@
-"""Versão inicial completa
+"""Versão inicial completa com gestão de equipa
 
-Revision ID: dea795e06307
+Revision ID: e62834739c62
 Revises: 
-Create Date: 2025-07-08 00:30:16.058958
+Create Date: 2025-07-08 21:41:03.204482
 
 """
 from alembic import op
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = 'dea795e06307'
+revision = 'e62834739c62'
 down_revision = None
 branch_labels = None
 depends_on = None
