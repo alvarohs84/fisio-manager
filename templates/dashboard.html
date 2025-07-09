@@ -3,10 +3,9 @@
 {% block styles %}
 {{ super() }}
 <style>
-    /* Define uma altura fixa para os contentores dos gráficos */
     .chart-container {
         position: relative;
-        height: 350px; /* Altura ideal para os gráficos do dashboard */
+        height: 350px;
         width: 100%;
     }
 </style>
@@ -14,10 +13,15 @@
 
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
     <h1>Dashboard</h1>
-    <!-- FORMULÁRIO DE FILTRO DE MÊS E ANO (COM MESES EM PORTUGUÊS) -->
     <form method="GET" action="{{ url_for('dashboard') }}" id="filterForm" class="d-flex align-items-center gap-2">
+        <select name="professional_id" class="form-select form-select-sm" onchange="this.form.submit()">
+            <option value="">Todos os Profissionais</option>
+            {% for prof in professionals %}
+                <option value="{{ prof.id }}" {% if prof.id == selected_professional_id %}selected{% endif %}>{{ prof.name }}</option>
+            {% endfor %}
+        </select>
         {% set meses = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'] %}
         <select name="month" class="form-select form-select-sm" onchange="this.form.submit()">
             {% for mes in meses %}
@@ -32,24 +36,29 @@
     </form>
 </div>
 
-<!-- Div escondida para guardar os dados dos gráficos de forma segura -->
-<div id="chart-data" 
-     data-gender='{{ gender_data|tojson }}'
-     data-age='{{ age_data|tojson }}'
-     data-specialty='{{ specialty_data|tojson }}'
-     style="display: none;">
-</div>
-
-
 <!-- Linha de Gráficos de Perfil de Pacientes -->
 <div class="row">
     <div class="col-md-6 col-lg-4 mb-4">
         <div class="card shadow-sm h-100">
-            <div class="card-body d-flex flex-column">
-                <h5 class="card-title text-center">Distribuição por Gênero</h5>
-                <div class="chart-container mt-auto">
-                    <canvas id="genderChart"></canvas>
-                </div>
+            <div class="card-body">
+                <h5 class="card-title text-center">Perfil por Gênero</h5>
+                {% if total_patients > 0 %}
+                <ul class="list-group list-group-flush mt-3">
+                    {% for gender, count in gender_data.items()|sort %}
+                    <li class="list-group-item px-0">
+                        <div class="d-flex justify-content-between">
+                            <span>{{ gender }}</span>
+                            <strong>{{ count }} <span class="text-muted">({{ (count / total_patients * 100)|round(1) }}%)</span></strong>
+                        </div>
+                        <div class="progress mt-1" style="height: 10px;">
+                            <div class="progress-bar" role="progressbar" style="width: {{ (count / total_patients * 100)|round }}%;" aria-valuenow="{{ count }}" aria-valuemin="0" aria-valuemax="{{ total_patients }}"></div>
+                        </div>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <p class="text-center text-muted mt-3">Nenhum paciente cadastrado.</p>
+                {% endif %}
             </div>
         </div>
     </div>
@@ -90,10 +99,12 @@
                         </thead>
                         <tbody>
                             {% for patient, count in patient_appointment_counts %}
-                                <tr>
-                                    <td>{{ patient.full_name }}</td>
-                                    <td class="text-center">{{ count or 0 }}</td>
-                                </tr>
+                                {% if count > 0 %}
+                                    <tr>
+                                        <td>{{ patient.full_name }}</td>
+                                        <td class="text-center">{{ count }}</td>
+                                    </tr>
+                                {% endif %}
                             {% else %}
                                 <tr>
                                     <td colspan="2" class="text-center text-muted">Nenhum atendimento concluído neste período.</td>
@@ -115,38 +126,8 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     // --- DADOS VINDOS DO BACKEND ---
-    const chartDataElement = document.getElementById('chart-data');
-    const genderData = JSON.parse(chartDataElement.dataset.gender);
-    const ageData = JSON.parse(chartDataElement.dataset.age);
-    const specialtyData = JSON.parse(chartDataElement.dataset.specialty);
-
-    // --- CONFIGURAÇÃO PADRÃO DOS GRÁFICOS ---
-    const defaultOptions = {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-            legend: {
-                position: 'bottom',
-            }
-        }
-    };
-
-    // --- GRÁFICO DE GÊNERO (PIE) ---
-    const genderCtx = document.getElementById('genderChart');
-    if (genderCtx) {
-        new Chart(genderCtx, {
-            type: 'pie',
-            data: {
-                labels: Object.keys(genderData),
-                datasets: [{
-                    label: 'Pacientes',
-                    data: Object.values(genderData),
-                    backgroundColor: ['#0d6efd', '#dc3545', '#6c757d'],
-                }]
-            },
-            options: defaultOptions
-        });
-    }
+    const ageData = {{ age_data|tojson|safe }};
+    const specialtyData = {{ specialty_data|tojson|safe }};
 
     // --- GRÁFICO DE FAIXA ETÁRIA (BARRA HORIZONTAL) ---
     const ageCtx = document.getElementById('ageChart');
@@ -156,7 +137,7 @@ document.addEventListener('DOMContentLoaded', function() {
             data: {
                 labels: Object.keys(ageData),
                 datasets: [{
-                    label: 'Pacientes por Faixa Etária',
+                    label: 'Nº de Pacientes',
                     data: Object.values(ageData),
                     backgroundColor: '#198754',
                 }]
@@ -179,7 +160,7 @@ document.addEventListener('DOMContentLoaded', function() {
             data: {
                 labels: Object.keys(specialtyData),
                 datasets: [{
-                    label: 'Pacientes por Especialidade',
+                    label: 'Nº de Pacientes',
                     data: Object.values(specialtyData),
                     backgroundColor: '#0d6efd',
                 }]
