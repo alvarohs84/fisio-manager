@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-10">
+        <div class="card shadow-sm">
+            <div class="card-header">
+                <h2 class="card-title text-center">{{ title }} para {{ patient.full_name }}</h2>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="" novalidate enctype="multipart/form-data">
+                    {{ form.hidden_tag() }}
+
+                    <fieldset class="mb-4">
+                        <legend class="fs-5 border-bottom pb-2 mb-3">Anamnese</legend>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                {{ form.main_complaint.label(class="form-label") }}
+                                {{ form.main_complaint(class="form-control", rows=3) }}
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                {{ form.history_of_present_illness.label(class="form-label") }}
+                                {{ form.history_of_present_illness(class="form-control", rows=3) }}
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                {{ form.past_medical_history.label(class="form-label") }}
+                                {{ form.past_medical_history(class="form-control", rows=3) }}
+                            </div>
+                             <div class="col-md-6 mb-3">
+                                {{ form.medications.label(class="form-label") }}
+                                {{ form.medications(class="form-control", rows=3) }}
+                            </div>
+                            <div class="col-12 mb-3">
+                                {{ form.social_history.label(class="form-label") }}
+                                {{ form.social_history(class="form-control", rows=2) }}
+                            </div>
+                        </div>
+                    </fieldset>
+
+                    <fieldset class="mb-4">
+                        <legend class="fs-5 border-bottom pb-2 mb-3">Exame Físico</legend>
+                        <div class="row">
+                             <div class="col-md-6 mb-3">
+                                {{ form.inspection_notes.label(class="form-label") }}
+                                {{ form.inspection_notes(class="form-control", rows=3) }}
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                {{ form.palpation_notes.label(class="form-label") }}
+                                {{ form.palpation_notes(class="form-control", rows=3) }}
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                {{ form.mobility_assessment.label(class="form-label") }}
+                                {{ form.mobility_assessment(class="form-control", rows=3) }}
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                {{ form.strength_assessment.label(class="form-label") }}
+                                {{ form.strength_assessment(class="form-control", rows=3) }}
+                            </div>
+                             <div class="col-md-6 mb-3">
+                                {{ form.neuro_assessment.label(class="form-label") }}
+                                {{ form.neuro_assessment(class="form-control", rows=3) }}
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                {{ form.functional_assessment.label(class="form-label") }}
+                                {{ form.functional_assessment(class="form-control", rows=3) }}
+                            </div>
+                        </div>
+                    </fieldset>
+                    
+                    <fieldset class="mb-4">
+                        <legend class="fs-5 border-bottom pb-2 mb-3">Diagnóstico e Plano</legend>
+                         <div class="mb-3">
+                            {{ form.files.label(class="form-label") }}
+                            {{ form.files(class="form-control") }}
+                        </div>
+                        <div class="mb-3">
+                            {{ form.diagnosis.label(class="form-label") }}
+                            {{ form.diagnosis(class="form-control", rows=3) }}
+                        </div>
+                         <div class="mb-3">
+                            {{ form.goals.label(class="form-label") }}
+                            {{ form.goals(class="form-control", rows=3) }}
+                        </div>
+                        <div class="mb-3">
+                            {{ form.treatment_plan.label(class="form-label") }}
+                            {{ form.treatment_plan(class="form-control", rows=4) }}
+                        </div>
+                    </fieldset>
+
+                    <div class="d-flex justify-content-between">
+                        <a href="{{ url_for('patient_detail', patient_id=patient.id) }}" class="btn btn-secondary">Cancelar</a>
+                        {{ form.submit(class="btn btn-primary") }}
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
