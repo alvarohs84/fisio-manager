@@ -29,9 +29,8 @@
 <body>
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary mb-4 shadow-sm">
         <div class="container">
-            <!-- LOGÓTIPO ADICIONADO AQUI -->
             <a class="navbar-brand d-flex align-items-center" href="{{ url_for('index') }}">
-                <img src="https://i.postimg.cc/s2qKhNph/Logo-Fisio-Manager.jpg" alt="Logótipo FisioManager">
+                <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Logótipo FisioManager" onerror="this.style.display='none'">
                 <span class="fs-4">FisioManager</span>
             </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
@@ -45,10 +44,12 @@
                         <li class="nav-item"><a class="nav-link navbar-custom-link" href="{{ url_for('agenda') }}">Agenda</a></li>
                         <li class="nav-item"><a class="nav-link navbar-custom-link" href="{{ url_for('list_patients') }}">Pacientes</a></li>
                         
+                        <!-- Condição para mostrar o link "Profissionais" apenas para administradores -->
                         {% if current_user.role == 'admin' %}
                             <li class="nav-item"><a class="nav-link navbar-custom-link" href="{{ url_for('list_professionals') }}">Profissionais</a></li>
                         {% endif %}
                         
+                        <li class="nav-item"><a class="nav-link navbar-custom-link" href="{{ url_for('list_exercises') }}">Exercícios</a></li>
                         <li class="nav-item"><a class="nav-link navbar-custom-link" href="{{ url_for('reports') }}">Relatórios</a></li>
                         <li class="nav-item"><a href="{{ url_for('pricing') }}" class="nav-link navbar-custom-link">Planos</a></li>
                     {% endif %}

@@ -1,5 +1,3 @@
-# app.py (COMPLETO E COM VERIFICAÇÃO DE ACESSO DESABILITADA PARA TESTES)
-
 import os
 from dotenv import load_dotenv
 import uuid

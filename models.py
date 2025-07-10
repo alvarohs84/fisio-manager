@@ -11,7 +11,6 @@ class Clinic(db.Model):
     name = db.Column(db.String(150), nullable=False)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     access_expires_on = db.Column(db.DateTime, nullable=True)
-
     users = db.relationship('User', backref='clinic', lazy='dynamic')
     patients = db.relationship('Patient', backref='clinic', lazy='dynamic')
     exercises = db.relationship('Exercise', backref='clinic', lazy='dynamic')
@@ -24,27 +23,19 @@ class User(UserMixin, db.Model):
     name = db.Column(db.String(100), nullable=False)
     email = db.Column(db.String(120), index=True, unique=True, nullable=False)
     password_hash = db.Column(db.String(256))
-    
     role = db.Column(db.String(50), nullable=False, default='professional')
     date_of_birth = db.Column(db.Date, nullable=True)
     address = db.Column(db.String(255), nullable=True)
     cpf = db.Column(db.String(20), nullable=True)
     crefito = db.Column(db.String(20), nullable=True)
     phone = db.Column(db.String(20), nullable=True)
-    
     clinic_id = db.Column(db.Integer, db.ForeignKey('clinic.id'), nullable=False)
-    
     patients = db.relationship('Patient', backref='professional', lazy='dynamic', cascade="all, delete-orphan")
     appointments = db.relationship('Appointment', backref='professional', lazy='dynamic', cascade="all, delete-orphan")
     
-    def set_password(self, password):
-        self.password_hash = generate_password_hash(password)
-    
-    def check_password(self, password):
-        return check_password_hash(self.password_hash, password)
-    
-    def __repr__(self):
-        return f'<User {self.name}>'
+    def set_password(self, password): self.password_hash = generate_password_hash(password)
+    def check_password(self, password): return check_password_hash(self.password_hash, password)
+    def __repr__(self): return f'<User {self.name}>'
 
 class Patient(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -56,9 +47,7 @@ class Patient(db.Model):
     specialty = db.Column(db.String(100), nullable=True)
     clinic_id = db.Column(db.Integer, db.ForeignKey('clinic.id'), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    
     portal_access_token = db.Column(db.String(36), unique=True, default=lambda: str(uuid.uuid4()))
-
     appointments = db.relationship('Appointment', backref='patient', lazy='dynamic', cascade="all, delete-orphan")
     records = db.relationship('ElectronicRecord', backref='patient', lazy='dynamic', cascade="all, delete-orphan")
     assessments = db.relationship('Assessment', backref='patient', lazy='dynamic', cascade="all, delete-orphan")
